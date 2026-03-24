@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from urllib.parse import quote, urlencode
 
@@ -21,12 +22,15 @@ from .security import (
     add_cors_headers,
     cors_preflight,
 )
+from .webhook import create_webhook_receiver, handle_webhook
+from .cleanup import cleanup_loop
 
 
 class CallBridgeBot(Plugin):
     """Maubot plugin that bridges guest callers into MatrixRTC/LiveKit calls."""
 
     rate_limiter: RateLimiter
+    _cleanup_task: asyncio.Task | None
 
     @classmethod
     def get_config_class(cls) -> type[BaseProxyConfig]:
@@ -42,7 +46,16 @@ class CallBridgeBot(Plugin):
         self.rate_limiter = RateLimiter(
             max_per_minute=self.config["rate_limit_per_minute"]
         )
+        self._webhook_receiver = create_webhook_receiver(
+            api_key=self.config["livekit_api_key"],
+            api_secret=self.config["livekit_api_secret"],
+        )
         self._setup_routes()
+        # Start background cleanup task
+        cleanup_interval = self.config["cleanup_interval"]
+        self._cleanup_task = asyncio.create_task(
+            cleanup_loop(self.database, self.client.api, cleanup_interval)
+        )
         self.log.info("Wally Conference plugin started")
 
     def _setup_routes(self) -> None:
@@ -239,14 +252,17 @@ class CallBridgeBot(Plugin):
             allowed_origins,
         )
 
-    # ── Webhook (stub) ───────────────────────────────────────
+    # ── Webhook ────────────────────────────────────────────────
 
     async def handle_livekit_webhook(
         self, request: aiohttp_web.Request
     ) -> aiohttp_web.Response:
-        """Handle LiveKit webhook events (participant_left, etc.)."""
-        return aiohttp_web.json_response(
-            {"error": "not implemented"}, status=501
+        """Handle LiveKit webhook events (participant_left, room_finished, etc.)."""
+        return await handle_webhook(
+            request,
+            self._webhook_receiver,
+            self.database,
+            self.client.api,
         )
 
     # ── Health ───────────────────────────────────────────────
@@ -277,4 +293,11 @@ class CallBridgeBot(Plugin):
 
     async def stop(self) -> None:
         self.log.info("Wally Conference plugin stopping")
+        if self._cleanup_task is not None and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
         await super().stop()

@@ -117,6 +117,14 @@ async def count_active_sessions(db: Database, room_id: str) -> int:
     return row["cnt"] if row else 0
 
 
+async def get_sessions_by_lk_room(db: Database, lk_room: str) -> list[dict]:
+    """Return all guest sessions for a given LiveKit room alias."""
+    rows = await db.fetch(
+        "SELECT * FROM guest_session WHERE lk_room = $1", lk_room
+    )
+    return [dict(r) for r in rows]
+
+
 async def get_expired_sessions(db: Database) -> list[dict]:
     """Return all sessions whose expiry has passed."""
     import time
@@ -171,3 +179,79 @@ async def count_active_breakouts(db: Database, matrix_room_id: str) -> int:
         matrix_room_id,
     )
     return row["cnt"] if row else 0
+
+
+async def get_active_breakouts(db: Database, matrix_room_id: str) -> list[dict]:
+    """Return all active (non-ended) breakout rooms for a parent room."""
+    rows = await db.fetch(
+        "SELECT * FROM breakout_room WHERE matrix_room_id = $1 AND ended_at IS NULL",
+        matrix_room_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def end_breakout_db(db: Database, breakout_id: str) -> None:
+    """Mark a breakout room as ended."""
+    import time
+
+    await db.execute(
+        "UPDATE breakout_room SET ended_at = $1 WHERE id = $2",
+        int(time.time()),
+        breakout_id,
+    )
+
+
+async def get_sessions_for_breakout(db: Database, breakout_id: str) -> list[dict]:
+    """Return all guest sessions in a given breakout room."""
+    rows = await db.fetch(
+        "SELECT * FROM guest_session WHERE breakout_id = $1", breakout_id
+    )
+    return [dict(r) for r in rows]
+
+
+async def update_session_breakout(
+    db: Database,
+    session_id: str,
+    breakout_id: str,
+    lk_room: str,
+    expires_at: int,
+) -> None:
+    """Move a session to a breakout room, updating its LK room and expiry."""
+    await db.execute(
+        "UPDATE guest_session SET breakout_id = $1, lk_room = $2, expires_at = $3 WHERE id = $4",
+        breakout_id,
+        lk_room,
+        expires_at,
+        session_id,
+    )
+
+
+async def count_all_active_sessions(db: Database) -> int:
+    """Count all active (non-expired) guest sessions across all rooms."""
+    import time
+
+    row = await db.fetchrow(
+        "SELECT COUNT(*) AS cnt FROM guest_session WHERE expires_at > $1",
+        int(time.time()),
+    )
+    return row["cnt"] if row else 0
+
+
+async def count_all_active_breakouts(db: Database) -> int:
+    """Count all active (non-ended) breakout rooms across all parent rooms."""
+    row = await db.fetchrow(
+        "SELECT COUNT(*) AS cnt FROM breakout_room WHERE ended_at IS NULL"
+    )
+    return row["cnt"] if row else 0
+
+
+async def get_all_sessions_in_room(db: Database, room_id: str) -> list[dict]:
+    """Return all guest sessions for a given Matrix room ID."""
+    import time
+
+    rows = await db.fetch(
+        "SELECT * FROM guest_session WHERE room_id = $1 AND expires_at > $2",
+        room_id,
+        int(time.time()),
+    )
+    return [dict(r) for r in rows]
