@@ -113,7 +113,7 @@ func (svc *Service) cmdLink(ctx context.Context, evt *event.Event, roomID id.Roo
 		return
 	}
 
-	guestLink := fmt.Sprintf("%s/guest/%s",
+	guestLink := fmt.Sprintf("%s/%s",
 		strings.TrimRight(endpoint, "/"),
 		url.PathEscape(string(roomID)),
 	)
