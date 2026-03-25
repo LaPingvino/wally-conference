@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 )
 
 const guestPageTemplate = `<!DOCTYPE html>
@@ -103,10 +104,14 @@ form.addEventListener('submit', async (e) => {
 
 // HandleGuestPage serves a self-contained HTML guest join page.
 func (svc *Service) HandleGuestPage(w http.ResponseWriter, r *http.Request) {
-	roomID := r.PathValue("roomID")
-	if roomID == "" {
+	rawRoomID := r.PathValue("roomID")
+	if rawRoomID == "" {
 		http.Error(w, "Missing room ID", http.StatusBadRequest)
 		return
+	}
+	roomID, err := url.PathUnescape(rawRoomID)
+	if err != nil {
+		roomID = rawRoomID
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, guestPageTemplate, html.EscapeString(roomID), roomID)
