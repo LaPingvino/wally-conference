@@ -21,6 +21,13 @@ const guestPageTemplate = `<!DOCTYPE html>
     display: flex; align-items: center; justify-content: center;
     min-height: 100vh; padding: 1rem;
   }
+  body.in-call { padding: 0; }
+  body.in-call .card { display: none; }
+  body.in-call #callFrame {
+    display: block; position: fixed; inset: 0;
+    width: 100%%; height: 100%%; border: none;
+  }
+  #callFrame { display: none; }
   .card {
     background: #16213e; border-radius: 12px; padding: 2rem;
     max-width: 400px; width: 100%%; box-shadow: 0 4px 24px rgba(0,0,0,.4);
@@ -59,6 +66,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   </form>
   <div class="branding">Powered by <a href="https://github.com/LaPingvino/wally-conference">Wally Conference</a></div>
 </div>
+<iframe id="callFrame" allow="camera;microphone;display-capture;autoplay;clipboard-write;screen-wake-lock"></iframe>
 <script>
 const roomId = %q;
 const form = document.getElementById('joinForm');
@@ -87,7 +95,9 @@ form.addEventListener('submit', async (e) => {
     if (data.ec_url) {
       msg.className = 'success';
       msg.textContent = 'Joining call...';
-      window.location.href = data.ec_url;
+      const frame = document.getElementById('callFrame');
+      frame.src = data.ec_url;
+      document.body.classList.add('in-call');
     } else {
       throw new Error('No call URL returned');
     }
