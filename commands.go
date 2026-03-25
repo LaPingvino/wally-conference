@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,15 +100,23 @@ func (svc *Service) cmdStatus(ctx context.Context, evt *event.Event, roomID id.R
 }
 
 func (svc *Service) cmdLink(ctx context.Context, evt *event.Event, roomID id.RoomID) {
+	// Derive the Cinny app origin from ec_base_url
+	ecParsed, err := url.Parse(svc.Config.ECBaseURL)
+	if err != nil || ecParsed.Host == "" {
+		svc.sendReply(ctx, evt, "Error: ec_base_url is not configured correctly.")
+		return
+	}
+	clientOrigin := fmt.Sprintf("%s://%s", ecParsed.Scheme, ecParsed.Host)
+
+	guestLink := fmt.Sprintf("%s/call/guest/%s?endpoint=%s",
+		clientOrigin,
+		url.PathEscape(string(roomID)),
+		url.QueryEscape(svc.Config.PublicURL),
+	)
+
 	msg := fmt.Sprintf(
-		"**Guest Join Info**\n\n"+
-			"Room ID: `%s`\n\n"+
-			"Guests can join by POSTing to the `/join` endpoint with:\n"+
-			"```json\n"+
-			`{"room_id": "%s", "display_name": "Guest Name"}`+"\n"+
-			"```\n\n"+
-			"The response includes `ec_url` — a ready-to-open Element Call link.",
-		roomID, roomID,
+		"**Join this call as a guest:**\n%s\n\nShare this link — no Matrix account needed.",
+		guestLink,
 	)
 	svc.sendReply(ctx, evt, msg)
 }
