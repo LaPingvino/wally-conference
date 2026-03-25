@@ -12,7 +12,11 @@ access_token: ""
 password: ""
 
 # ── HTTP server ─────────────────────────────────────────
-listen_address: ":8080"
+listen_address: ":9991"
+
+# Externally reachable URL for the bot's HTTP API
+# Used in the eu.kiefte.wally.conference state event and guest join links
+public_url: "https://yourserver.com/wally-conference"
 
 # ── Database ────────────────────────────────────────────
 database: "/var/lib/wally-conference/wally-conference.db"

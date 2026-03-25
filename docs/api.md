@@ -7,7 +7,7 @@ All endpoints are served at:
 https://<host>:<port>/<path>
 ```
 
-The listen address is configured in `config.yaml` (default `:8080`). In production, use a reverse proxy (Caddy, nginx) to add TLS.
+The listen address is configured in `config.yaml` (default `:9991`). In production, use a reverse proxy (Caddy, nginx) to add TLS.
 
 ### POST /join — Guest join
 
@@ -130,6 +130,8 @@ Returns bot status.
 ```
 
 ## Bot Commands
+
+When the bot joins a room, it sends a formatted welcome message listing available commands and confirming it is active. This serves as both a health check and a quick reference for room members.
 
 Send these as messages in a Matrix room where the bot is present.
 

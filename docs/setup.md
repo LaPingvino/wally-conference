@@ -44,10 +44,24 @@ Register a new account on your homeserver for the bot:
 # Synapse
 register_new_matrix_user -c /etc/synapse/homeserver.yaml \
   -u wally-conference -p <password> --no-admin
-
-# Continuwuity
-# Use the admin API or register via a client
 ```
+
+**Continuwuity:** Send this command in the admin room:
+
+```
+!admin users create-user wally-conference <password>
+```
+
+Then obtain an access token:
+
+```bash
+curl -s -X POST https://matrix.yourserver.com/_matrix/client/v3/login \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"m.login.password","user":"@wally-conference:yourserver.com","password":"<password>"}' \
+  | jq .access_token
+```
+
+> **Note:** The server_name in your user ID may differ from the domain you connect to. For example, if your homeserver is reachable at `chat.kiefte.eu` but the server_name is `kiefte.eu`, the user ID would be `@wally-conference:kiefte.eu` while the homeserver URL is `https://chat.kiefte.eu`. Check your Continuwuity config for `server_name`.
 
 ### 2.2 Install the service
 
@@ -74,8 +88,11 @@ sudo install -Dm755 wally-conference /usr/bin/wally-conference
 ```bash
 sudo mkdir -p /etc/wally-conference
 sudo cp config.example.yaml /etc/wally-conference/config.yaml
-sudo editor /etc/wally-conference/config.yaml
+sudo chown -R wally-conference:wally-conference /etc/wally-conference/
+sudo -u wally-conference editor /etc/wally-conference/config.yaml
 ```
+
+> **Permissions:** The service user needs read access to the config directory. Use `sudo chown -R wally-conference:wally-conference /etc/wally-conference/` after creating it. When editing the config, use `sudo -u wally-conference editor ...` rather than plain `sudo editor ...` — editing as root resets file ownership and the service may fail to read it on next restart.
 
 Set at minimum:
 
@@ -126,7 +143,7 @@ auto_join_invites: true
 ### 2.6 Test guest access
 
 ```bash
-curl -X POST http://localhost:8080/join \
+curl -X POST http://localhost:9991/join \
   -H "Content-Type: application/json" \
   -d '{"room_id": "!yourroom:yourserver", "display_name": "Test Guest"}'
 ```
@@ -207,7 +224,7 @@ This is a future Wally feature. Until then, the `ec_url` from the bot's `/join` 
 ```caddy
 yourserver.com {
     handle_path /wally-conference/* {
-        reverse_proxy localhost:8080
+        reverse_proxy localhost:9991
     }
 }
 ```
@@ -218,7 +235,7 @@ yourserver.com {
 server {
     server_name yourserver.com;
     location /wally-conference/ {
-        proxy_pass http://localhost:8080/;
+        proxy_pass http://localhost:9991/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

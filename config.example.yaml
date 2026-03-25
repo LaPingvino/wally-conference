@@ -14,7 +14,7 @@ password: ""
 
 # ── HTTP server ─────────────────────────────────────────
 # Address to listen on for HTTP endpoints (/join, /webhook, /health, /breakout/*)
-listen_address: ":8080"
+listen_address: ":9991"
 
 # Externally reachable URL for the bot's HTTP API
 # Used in the eu.kiefte.wally.conference state event and guest join links

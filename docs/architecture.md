@@ -110,6 +110,31 @@ For breakout rooms:
 breakout_alias = base64_unpadded(SHA256(matrixRoomId + "|" + "m.call#BREAKOUT#" + breakoutId))
 ```
 
+## Room capability state event (`eu.kiefte.wally.conference`)
+
+When the bot joins a room, it sets a custom state event of type `eu.kiefte.wally.conference` (state key: `""`). This advertises the bot's presence and capabilities to Matrix clients.
+
+**Content:**
+```json
+{
+  "version": "0.1.0",
+  "endpoint": "https://yourserver.com/wally-conference",
+  "bot_user_id": "@wally-conference:yourserver.com",
+  "features": ["guest_join", "breakout_rooms", "webhooks"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | string | Bot protocol version (semver) |
+| `endpoint` | string | Public URL of the bot's HTTP API (from `public_url` config) |
+| `bot_user_id` | string | The bot's Matrix user ID |
+| `features` | array | List of supported features |
+
+**Client usage:** A Matrix client can check for this state event to detect whether guest calling is available in a room. If present, the client can show a "Guest link" button that calls the bot's `/join` endpoint (using `endpoint` from the event) and shares the resulting `ec_url`. The `features` array lets the client selectively show UI for breakout rooms and other capabilities.
+
+The bot updates this event whenever it restarts (to reflect version changes) or when its configuration changes.
+
 ## Breakout rooms
 
 Breakout rooms are **LiveKit-only** — no Matrix room is created. The bot:
