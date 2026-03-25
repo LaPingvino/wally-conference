@@ -106,14 +106,18 @@ func main() {
 
 	// Set up HTTP server
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /guest/{roomID}", svc.HandleGuestPage)
+	mux.HandleFunc("POST /guest/join", svc.HandleJoin)
+	mux.HandleFunc("OPTIONS /guest/join", svc.HandleCORSPreflight)
+	mux.HandleFunc("POST /guest/breakout/create", svc.HandleBreakoutCreate)
+	mux.HandleFunc("OPTIONS /guest/breakout/create", svc.HandleCORSPreflight)
+	mux.HandleFunc("POST /guest/breakout/move", svc.HandleBreakoutMove)
+	mux.HandleFunc("OPTIONS /guest/breakout/move", svc.HandleCORSPreflight)
+	// Keep legacy /join for backwards compat
 	mux.HandleFunc("POST /join", svc.HandleJoin)
 	mux.HandleFunc("OPTIONS /join", svc.HandleCORSPreflight)
 	mux.HandleFunc("POST /webhook", svc.HandleWebhook)
 	mux.HandleFunc("GET /health", svc.HandleHealth)
-	mux.HandleFunc("POST /breakout/create", svc.HandleBreakoutCreate)
-	mux.HandleFunc("OPTIONS /breakout/create", svc.HandleCORSPreflight)
-	mux.HandleFunc("POST /breakout/move", svc.HandleBreakoutMove)
-	mux.HandleFunc("OPTIONS /breakout/move", svc.HandleCORSPreflight)
 
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddress,

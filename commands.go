@@ -107,18 +107,15 @@ func (svc *Service) cmdStatus(ctx context.Context, evt *event.Event, roomID id.R
 }
 
 func (svc *Service) cmdLink(ctx context.Context, evt *event.Event, roomID id.RoomID) {
-	// Derive the Cinny app origin from ec_base_url
-	ecParsed, err := url.Parse(svc.Config.ECBaseURL)
-	if err != nil || ecParsed.Host == "" {
-		svc.sendReply(ctx, evt, "Error: ec_base_url is not configured correctly.")
+	endpoint := svc.Config.PublicURL
+	if endpoint == "" {
+		svc.sendReply(ctx, evt, "Error: `public_url` is not configured. Set it in config.yaml and restart.")
 		return
 	}
-	clientOrigin := fmt.Sprintf("%s://%s", ecParsed.Scheme, ecParsed.Host)
 
-	guestLink := fmt.Sprintf("%s/call/guest/%s?endpoint=%s",
-		clientOrigin,
+	guestLink := fmt.Sprintf("%s/guest/%s",
+		strings.TrimRight(endpoint, "/"),
 		url.PathEscape(string(roomID)),
-		url.QueryEscape(svc.Config.PublicURL),
 	)
 
 	msg := fmt.Sprintf(
