@@ -129,6 +129,7 @@ func (svc *Service) cmdInvite(ctx context.Context, evt *event.Event, roomID id.R
 		return
 	}
 	svc.sendReply(ctx, evt, fmt.Sprintf("Joined room `%s`.", targetRoom))
+	svc.onRoomJoin(ctx, id.RoomID(targetRoom))
 }
 
 func (svc *Service) cmdLeave(ctx context.Context, evt *event.Event, roomID id.RoomID, sender id.UserID, targetRoom string) {

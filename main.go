@@ -97,6 +97,7 @@ func main() {
 						log.Printf("Failed to auto-join room %s: %v", evt.RoomID, err)
 					} else {
 						log.Printf("Auto-joined room %s", evt.RoomID)
+						svc.onRoomJoin(ctx, evt.RoomID)
 					}
 				}
 			}

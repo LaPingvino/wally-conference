@@ -21,6 +21,10 @@ type Config struct {
 	// HTTP listen address (e.g. ":8080" or "127.0.0.1:8080")
 	ListenAddress string `yaml:"listen_address"`
 
+	// Externally reachable URL for the bot's HTTP API
+	// Used in state events and guest join links
+	PublicURL string `yaml:"public_url"`
+
 	// SQLite database path
 	Database string `yaml:"database"`
 
