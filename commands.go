@@ -59,6 +59,8 @@ func (svc *Service) HandleMatrixMessage(ctx context.Context, evt *event.Event) {
 			return
 		}
 		svc.cmdKick(ctx, evt, roomID, sender, parts[2])
+	case "activate":
+		svc.cmdActivate(ctx, evt, roomID)
 	case "config":
 		svc.cmdConfig(ctx, evt, roomID, sender)
 	case "breakout":
@@ -74,11 +76,16 @@ const cmdHelp = `Wally Conference commands:
 - ` + "`!wc invite <room_id>`" + ` — bot joins a room
 - ` + "`!wc leave <room_id>`" + ` — bot leaves a room
 - ` + "`!wc kick <session_id>`" + ` — remove a guest
+- ` + "`!wc activate`" + ` — re-send welcome message and state event
 - ` + "`!wc config`" + ` — show configuration
 - ` + "`!wc breakout create <topic>`" + ` — create breakout
 - ` + "`!wc breakout list`" + ` — list active breakouts
 - ` + "`!wc breakout end <id>`" + ` — end breakout
 - ` + "`!wc breakout move <session_id> <breakout_id>`" + ` — move guest`
+
+func (svc *Service) cmdActivate(ctx context.Context, evt *event.Event, roomID id.RoomID) {
+	svc.onRoomJoin(ctx, roomID)
+}
 
 func (svc *Service) cmdStatus(ctx context.Context, evt *event.Event, roomID id.RoomID) {
 	guests, _ := CountAllActiveSessions(svc.DB)
