@@ -1,6 +1,6 @@
 # Call Bridge — Guest Access & Breakout Rooms for Element Call
 
-Call Bridge is a [Maubot](https://docs.mau.fi/maubot/) plugin that adds guest access and breakout room support to Matrix voice/video rooms powered by [Element Call](https://github.com/element-hq/element-call) and [LiveKit](https://livekit.io/).
+Call Bridge (Wally Conference) is a standalone Go service that adds guest access and breakout room support to Matrix voice/video rooms powered by [Element Call](https://github.com/element-hq/element-call) and [LiveKit](https://livekit.io/). It uses [mautrix-go](https://github.com/mautrix/go) for Matrix integration, the same library used by all mautrix bridges.
 
 ## What it does
 
@@ -35,7 +35,6 @@ The bot acts as a bridge between unauthenticated guests and the Matrix/LiveKit c
 
 ## Requirements
 
-- [Maubot](https://docs.mau.fi/maubot/) instance (0.4.0+)
 - Matrix homeserver (Synapse, Dendrite, or Continuwuity)
 - [LiveKit](https://livekit.io/) server (self-hosted or cloud)
 - [lk-jwt-service](https://github.com/element-hq/lk-jwt-service) (for Matrix-authenticated users)
@@ -46,16 +45,18 @@ The bot acts as a bridge between unauthenticated guests and the Matrix/LiveKit c
 See the [Setup Guide](setup.md) for full instructions. The short version:
 
 ```bash
-# 1. Install the plugin in your Maubot instance
-mbc upload call-bridge-v0.1.0.mbp
+# 1. Install from the wally-conference-git PKGBUILD (Arch Linux)
+#    or build from source: go build -o wally-conference .
 
-# 2. Create a bot account and instance in Maubot admin
+# 2. Copy config.example.yaml to /etc/wally-conference/config.yaml and edit
 
-# 3. Configure LiveKit credentials in the instance config
+# 3. Set homeserver, bot credentials, and LiveKit API keys
 
-# 4. Invite the bot to your VC rooms
+# 4. Start the service: systemctl enable --now wally-conference
 
-# 5. (Optional) Apply the EC patch to your Cinny/Wally build
+# 5. Invite the bot to your VC rooms
+
+# 6. (Optional) Apply the EC patch to your Cinny/Wally build
 ```
 
 ## License

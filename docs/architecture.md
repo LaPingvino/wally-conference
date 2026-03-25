@@ -16,8 +16,8 @@
                │ Matrix C-S API            │ Matrix C-S API
                │                           │
 ┌──────────────▼──────────┐  ┌─────────────▼──────────────┐
-│     Call Bridge Bot      │  │    Wally / Cinny Client     │
-│     (Maubot plugin)      │  │    (patched Element Call)   │
+│   Wally Conference Bot   │  │    Wally / Cinny Client     │
+│    (standalone Go svc)   │  │    (patched Element Call)   │
 │                          │  │                             │
 │  - Guest join endpoint   │  │  - Normal Matrix users      │
 │  - JWT issuance          │  │  - Patched EC accepts       │

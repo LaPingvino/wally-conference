@@ -1,8 +1,2 @@
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
-*.mbp
-.pytest_cache/
+wally-conference
+*.db

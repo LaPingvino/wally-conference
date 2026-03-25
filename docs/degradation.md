@@ -6,7 +6,7 @@ Call Bridge is designed for incremental deployment. Each component adds value in
 
 | Code | Component | What it provides |
 |------|-----------|-----------------|
-| **A** | Maubot plugin | JWT issuance, call.member proxy, guest management |
+| **A** | Wally Conference service | JWT issuance, call.member proxy, guest management |
 | **B** | EC patch | Element Call accepts pre-issued LiveKit JWT via URL param |
 | **C** | LiveKit webhook | Immediate cleanup when guest disconnects |
 | **W** | Wally guest UI | Shareable link page with name entry |
@@ -33,7 +33,7 @@ Call Bridge is designed for incremental deployment. Each component adds value in
 | Guest disconnects | call.member lingers until TTL expiry (EC auto-hides after `expires` ms) |
 | Normal Matrix users | **Unaffected** — they use lk-jwt-service, not the bot |
 | Breakout management | **Blocked** — no new breakouts or moves |
-| Recovery | Restart maubot. No data loss (DB persists). |
+| Recovery | Restart the service. No data loss (SQLite DB persists). |
 
 ### LiveKit webhook endpoint unreachable
 

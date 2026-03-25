@@ -4,8 +4,10 @@
 
 All endpoints are served at:
 ```
-https://<maubot-host>/_matrix/maubot/plugin/<instance-id>/<path>
+https://<host>:<port>/<path>
 ```
+
+The listen address is configured in `config.yaml` (default `:8080`). In production, use a reverse proxy (Caddy, nginx) to add TLS.
 
 ### POST /join — Guest join
 
