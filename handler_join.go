@@ -152,16 +152,22 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build EC URL
+	parentURL := svc.Config.PublicURL
+	if parentURL == "" {
+		parentURL = "https://localhost"
+	}
 	ecParams := url.Values{
-		"embed":        {"true"},
-		"widgetId":     {fmt.Sprintf("guest-%s", sessionID[:8])},
-		"roomId":       {body.RoomID},
-		"livekitToken": {jwtToken},
-		"livekitRoom":  {lkRoom},
-		"livekitUrl":   {svc.Config.LiveKitURL},
-		"displayName":  {displayName},
-		"skipLobby":    {"true"},
-		"header":       {"none"},
+		"embed":              {"true"},
+		"widgetId":           {fmt.Sprintf("guest-%s", sessionID[:8])},
+		"parentUrl":          {parentURL},
+		"roomId":             {body.RoomID},
+		"livekitToken":       {jwtToken},
+		"livekitRoom":        {lkRoom},
+		"livekitUrl":         {svc.Config.LiveKitURL},
+		"displayName":        {displayName},
+		"skipLobby":          {"true"},
+		"header":             {"none"},
+		"perParticipantE2EE": {"false"},
 	}
 	ecURL := fmt.Sprintf("%s?%s", svc.Config.ECBaseURL, ecParams.Encode())
 

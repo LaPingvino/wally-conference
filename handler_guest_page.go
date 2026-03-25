@@ -74,6 +74,35 @@ const nameInput = document.getElementById('name');
 const btn = document.getElementById('joinBtn');
 const msg = document.getElementById('msg');
 
+// Minimal Widget API shim — makes EC think it's in widget mode
+// so our livekitToken patch in spe() gets called.
+window.addEventListener('message', (ev) => {
+  if (!ev.data || typeof ev.data !== 'object') return;
+  const frame = document.getElementById('callFrame');
+  if (!frame || ev.source !== frame.contentWindow) return;
+  const d = ev.data;
+  // Respond to widget API requests from EC
+  if (d.api === 'fromWidget') {
+    if (d.action === 'content_loaded') {
+      // Ack the content loaded
+      frame.contentWindow.postMessage({
+        ...d, response: {}
+      }, '*');
+    } else if (d.action === 'get_openid') {
+      // EC asks for OpenID token — we don't have one, but our patch
+      // checks livekitToken before this is needed, so send empty
+      frame.contentWindow.postMessage({
+        ...d, response: {state: 'allowed', access_token: '', matrix_server_name: '', token_type: 'Bearer', expires_in: 0}
+      }, '*');
+    } else {
+      // Ack everything else to prevent timeouts
+      frame.contentWindow.postMessage({
+        ...d, response: {}
+      }, '*');
+    }
+  }
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const displayName = nameInput.value.trim();
