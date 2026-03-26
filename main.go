@@ -118,6 +118,7 @@ func main() {
 	mux.HandleFunc("OPTIONS /join", svc.HandleCORSPreflight)
 	mux.HandleFunc("POST /webhook", svc.HandleWebhook)
 	mux.HandleFunc("GET /health", svc.HandleHealth)
+	mux.HandleFunc("GET /guest/debug/{roomID}", svc.HandleDebug)
 
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddress,
