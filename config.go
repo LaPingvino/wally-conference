@@ -34,6 +34,10 @@ type Config struct {
 	LiveKitAPISecret  string `yaml:"livekit_api_secret"`
 	LiveKitServiceURL string `yaml:"livekit_service_url"`
 
+	// LiveKit room alias mode: "raw" (use Matrix room ID directly, older lk-jwt-service)
+	// or "hash" (SHA256 hash per MSC4195, newer lk-jwt-service)
+	LiveKitRoomAliasMode string `yaml:"livekit_room_alias_mode"`
+
 	// Guest settings
 	GuestTokenTTL     int `yaml:"guest_token_ttl"`      // seconds
 	MaxGuestsPerRoom  int `yaml:"max_guests_per_room"`
@@ -71,6 +75,7 @@ func LoadConfig(path string) (*Config, error) {
 		GuestTokenTTL:      7200,
 		MaxGuestsPerRoom:   20,
 		RequireActiveCall:  true,
+		LiveKitRoomAliasMode: "raw",
 		AllowedOrigins:     "*",
 		RateLimitPerMinute: 5,
 		AutoJoinInvites:    true,

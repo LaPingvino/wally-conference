@@ -25,18 +25,19 @@ func (svc *Service) HandleDebug(w http.ResponseWriter, r *http.Request) {
 		roomID = rawRoomID
 	}
 
-	// Compute what our alias would be
-	alias := LiveKitRoomAlias(roomID)
-	aliasInput := roomID + "|m.call#ROOM"
-
-	// Also compute with empty suffix for comparison
-	aliasEmpty := LiveKitRoomAlias2(roomID, "")
+	// Compute aliases in both modes
+	aliasHash := LiveKitRoomAlias(roomID)
+	aliasRaw := roomID
+	activeMode := svc.Config.LiveKitRoomAliasMode
+	activeAlias := LiveKitRoomAliasForMode(roomID, activeMode)
 
 	result := map[string]interface{}{
 		"matrix_room_id":   roomID,
-		"alias_input":      aliasInput,
-		"computed_alias":   alias,
-		"alias_empty_slot": aliasEmpty,
+		"active_mode":      activeMode,
+		"active_alias":     activeAlias,
+		"alias_hash_mode":  aliasHash,
+		"alias_raw_mode":   aliasRaw,
+		"alias_input":      roomID + "|m.call#ROOM",
 		"livekit_url":      svc.Config.LiveKitURL,
 		"lk_service_url":   svc.Config.LiveKitServiceURL,
 	}
@@ -64,11 +65,13 @@ func (svc *Service) HandleDebug(w http.ResponseWriter, r *http.Request) {
 				"num_participants": rm.NumParticipants,
 				"num_publishers":   rm.NumPublishers,
 				"created_at":       rm.CreationTime,
-				"matches_our_alias": rm.Name == alias,
+				"matches_active_alias": rm.Name == activeAlias,
+				"matches_hash":        rm.Name == aliasHash,
+				"matches_raw":         rm.Name == aliasRaw,
 			}
 
 			// If this room matches our alias, list participants
-			if rm.Name == alias || rm.NumParticipants > 0 {
+			if rm.Name == activeAlias || rm.NumParticipants > 0 {
 				parts, err := roomClient.ListParticipants(ctx, &livekit.ListParticipantsRequest{Room: rm.Name})
 				if err == nil {
 					var partList []map[string]interface{}

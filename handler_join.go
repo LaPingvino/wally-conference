@@ -91,7 +91,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	deviceID := fmt.Sprintf("GUEST_%s", uuid.New().String()[:8])
 
 	// Compute LiveKit room alias and participant identity
-	lkRoom := LiveKitRoomAlias(body.RoomID)
+	lkRoom := LiveKitRoomAliasForMode(body.RoomID, svc.Config.LiveKitRoomAliasMode)
 	lkIdent := LiveKitIdentity(svc.BotUserID, deviceID, sessionID)
 
 	// Compute state key: _@bot:server_DEVICE_ID
