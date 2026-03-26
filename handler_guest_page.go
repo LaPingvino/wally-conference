@@ -118,6 +118,13 @@ const guestPageTemplate = `<!DOCTYPE html>
   .tb-btn.hangup:hover { background: #c73e54; }
   .tb-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
+  /* Connection status */
+  #connStatus {
+    text-align: center; padding: 8px; font-size: .85rem;
+    color: #888; background: #16213e; z-index: 5;
+  }
+  #connStatus.connected { display: none; }
+
   /* Responsive grid */
   @media (min-width: 600px) {
     #selfView { width: 200px; height: 150px; }
@@ -141,6 +148,7 @@ const guestPageTemplate = `<!DOCTYPE html>
 
 <!-- Call view -->
 <div id="callView">
+  <div id="connStatus">Connecting&hellip;</div>
   <div id="videoGrid"></div>
   <div id="selfView"><div class="no-video">&#128100;</div></div>
   <div id="toolbar">
@@ -159,7 +167,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.18.0/dist/livekit-client.umd.js"></script>
 <script>
 (function() {
   const roomId = %q;
@@ -301,14 +309,46 @@ const guestPageTemplate = `<!DOCTYPE html>
 
   // ── Join flow ──
 
+  function showStatus(text, isError) {
+    msgEl.className = isError ? 'error' : 'success';
+    msgEl.textContent = text;
+  }
+
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const displayName = nameInput.value.trim();
     if (!displayName) return;
     btn.disabled = true;
-    btn.textContent = 'Joining\u2026';
+    btn.textContent = 'Requesting media access\u2026';
     msgEl.textContent = '';
     msgEl.className = '';
+
+    // Request media permissions BEFORE connecting — user sees the browser
+    // prompt on the join card rather than a blank call view.
+    var localStream = null;
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({audio: true, video: true});
+    } catch (mediaErr) {
+      // Camera denied/unavailable — try audio only
+      console.warn('Camera not available, trying audio only:', mediaErr);
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({audio: true});
+        showStatus('Camera unavailable \u2014 joining with audio only', false);
+      } catch (audioErr) {
+        console.warn('No media devices available:', audioErr);
+        showStatus('No camera or microphone found \u2014 joining as listener', false);
+      }
+    }
+
+    // Stop the preview stream — LiveKit will request its own
+    var hasVideo = false, hasAudio = false;
+    if (localStream) {
+      hasVideo = localStream.getVideoTracks().length > 0;
+      hasAudio = localStream.getAudioTracks().length > 0;
+      localStream.getTracks().forEach(function(t) { t.stop(); });
+    }
+
+    btn.textContent = 'Connecting\u2026';
     try {
       const resp = await fetch('./join', {
         method: 'POST',
@@ -317,16 +357,15 @@ const guestPageTemplate = `<!DOCTYPE html>
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Join failed');
-      await startCall(data.livekit_url, data.jwt, displayName);
+      await startCall(data.livekit_url, data.jwt, displayName, hasAudio, hasVideo);
     } catch (err) {
-      msgEl.className = 'error';
-      msgEl.textContent = err.message;
+      showStatus(err.message, true);
       btn.disabled = false;
       btn.textContent = 'Join Call';
     }
   });
 
-  async function startCall(livekitUrl, jwt, displayName) {
+  async function startCall(livekitUrl, jwt, displayName, hasAudio, hasVideo) {
     // Hide join card, show call view
     document.getElementById('joinCard').style.display = 'none';
     callView.classList.add('active');
@@ -379,20 +418,36 @@ const guestPageTemplate = `<!DOCTYPE html>
       leaveCall();
     });
 
+    room.on(LK.RoomEvent.ConnectionStateChanged, function(state) {
+      var el = document.getElementById('connStatus');
+      if (state === LK.ConnectionState.Connected) {
+        el.className = 'connected';
+      } else if (state === LK.ConnectionState.Reconnecting) {
+        el.className = '';
+        el.textContent = 'Reconnecting\u2026';
+      }
+    });
+
     // Connect
     await room.connect(livekitUrl, jwt);
 
-    // Publish camera + mic
-    try {
-      await room.localParticipant.enableCameraAndMicrophone();
-    } catch (err) {
-      console.warn('Could not enable camera/mic:', err);
-      // Try mic only
+    // Publish media based on what permissions we got
+    if (hasVideo && hasAudio) {
       try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-      } catch (e2) {
-        console.warn('Could not enable mic:', e2);
+        await room.localParticipant.enableCameraAndMicrophone();
+      } catch (err) {
+        console.warn('Could not enable camera/mic:', err);
+        try { await room.localParticipant.setMicrophoneEnabled(true); } catch (e2) { console.warn('Mic fallback failed:', e2); }
       }
+    } else if (hasAudio) {
+      try { await room.localParticipant.setMicrophoneEnabled(true); } catch (err) { console.warn('Could not enable mic:', err); }
+      micEnabled = true; camEnabled = false;
+      btnCam.classList.add('active');
+    } else {
+      // No media — listener mode
+      micEnabled = false; camEnabled = false;
+      btnMic.classList.add('active');
+      btnCam.classList.add('active');
     }
 
     updateSelfView();
