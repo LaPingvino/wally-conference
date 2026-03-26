@@ -118,6 +118,32 @@ const guestPageTemplate = `<!DOCTYPE html>
   .tb-btn.hangup:hover { background: #c73e54; }
   .tb-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
+  /* Debug panel — toggle with Ctrl+D */
+  #debugPanel {
+    display: none; position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(420px, 90vw); background: rgba(0,0,0,.92); color: #0f0;
+    font-family: monospace; font-size: .75rem; padding: 12px;
+    overflow-y: auto; z-index: 100; border-left: 2px solid #333;
+  }
+  #debugPanel.open { display: block; }
+  #debugPanel h3 { color: #e94560; font-size: .9rem; margin: 8px 0 4px; }
+  #debugPanel pre { white-space: pre-wrap; word-break: break-all; margin: 0 0 6px; }
+  #debugPanel .dbg-row { padding: 2px 0; border-bottom: 1px solid #222; }
+  #debugPanel .dbg-key { color: #888; }
+  #debugPanel .dbg-val { color: #4ec94e; }
+  #debugPanel .dbg-warn { color: #e94560; }
+  #debugPanel button {
+    background: #333; color: #eee; border: 1px solid #555;
+    padding: 4px 10px; border-radius: 4px; cursor: pointer; margin: 2px;
+    font-family: monospace; font-size: .75rem;
+  }
+  #debugPanel button:hover { background: #555; }
+  #debugPanel input {
+    background: #111; color: #0f0; border: 1px solid #333;
+    padding: 4px 6px; font-family: monospace; font-size: .75rem;
+    width: 100%%; margin: 4px 0;
+  }
+
   /* Connection status */
   #connStatus {
     text-align: center; padding: 8px; font-size: .85rem;
@@ -165,6 +191,28 @@ const guestPageTemplate = `<!DOCTYPE html>
       <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 010-1.36C3.46 8.83 7.49 7 12 7s8.54 1.83 11.71 4.72c.18.18.29.44.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 00-2.67-1.85.996.996 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
     </button>
   </div>
+</div>
+
+<!-- Debug panel (Ctrl+D to toggle) -->
+<div id="debugPanel">
+  <h3>Wally Debug <span style="float:right;cursor:pointer" onclick="document.getElementById('debugPanel').classList.remove('open')">&times;</span></h3>
+  <div id="dbgInfo"></div>
+  <h3>LiveKit Room Alias Tester</h3>
+  <div>
+    <div class="dbg-row"><span class="dbg-key">Matrix Room ID:</span> <span class="dbg-val" id="dbgRoomId"></span></div>
+    <label style="color:#888;font-size:.7rem">Suffix (default: m.call#ROOM, try empty):</label>
+    <input id="dbgSuffix" value="m.call#ROOM" placeholder="m.call#ROOM">
+    <button id="dbgCalcHash">Compute alias</button>
+    <pre id="dbgHashResult"></pre>
+  </div>
+  <h3>Reconnect with custom alias</h3>
+  <input id="dbgCustomAlias" placeholder="Paste a LiveKit room alias to try">
+  <button id="dbgReconnect">Reconnect to this room</button>
+  <pre id="dbgReconnectResult"></pre>
+  <h3>Participants</h3>
+  <div id="dbgParticipants"></div>
+  <h3>Event Log</h3>
+  <div id="dbgLog" style="max-height:200px;overflow-y:auto"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.18.0/dist/livekit-client.umd.js"></script>
@@ -379,18 +427,22 @@ const guestPageTemplate = `<!DOCTYPE html>
     // ── Room events ──
 
     room.on(LK.RoomEvent.TrackSubscribed, function(track, publication, participant) {
+      dbgLog('TrackSubscribed: ' + (participant.name||participant.identity) + ' ' + track.source + ':' + track.kind);
       attachTrackToTile(track, participant);
     });
 
     room.on(LK.RoomEvent.TrackUnsubscribed, function(track, publication, participant) {
+      dbgLog('TrackUnsubscribed: ' + (participant.name||participant.identity) + ' ' + track.source + ':' + track.kind);
       detachTrack(track, participant);
     });
 
     room.on(LK.RoomEvent.ParticipantConnected, function(participant) {
+      dbgLog('ParticipantConnected: ' + participant.identity + ' (' + (participant.name||'?') + ')');
       ensureTile(participant);
     });
 
     room.on(LK.RoomEvent.ParticipantDisconnected, function(participant) {
+      dbgLog('ParticipantDisconnected: ' + participant.identity);
       removeTile(participant);
     });
 
@@ -419,9 +471,11 @@ const guestPageTemplate = `<!DOCTYPE html>
     });
 
     room.on(LK.RoomEvent.ConnectionStateChanged, function(state) {
+      dbgLog('ConnectionState: ' + state);
       var el = document.getElementById('connStatus');
       if (state === LK.ConnectionState.Connected) {
         el.className = 'connected';
+        dbgLog('Connected to LK room: ' + (room.name || '?') + ' sid=' + (room.sid || '?'));
       } else if (state === LK.ConnectionState.Reconnecting) {
         el.className = '';
         el.textContent = 'Reconnecting\u2026';
@@ -523,6 +577,159 @@ const guestPageTemplate = `<!DOCTYPE html>
     btnCam.classList.remove('active');
     btnScreen.classList.remove('active');
   }
+  // ── Debug panel ──
+
+  var dbgData = {};  // stored join response
+
+  function dbgLog(msg) {
+    var el = document.getElementById('dbgLog');
+    var t = new Date().toISOString().slice(11,23);
+    el.innerHTML = '<div class="dbg-row">[' + t + '] ' + msg + '</div>' + el.innerHTML;
+  }
+
+  function dbgUpdateInfo() {
+    var el = document.getElementById('dbgInfo');
+    var html = '';
+    function row(k, v, cls) {
+      html += '<div class="dbg-row"><span class="dbg-key">' + k + ':</span> <span class="' + (cls||'dbg-val') + '">' + (v||'—') + '</span></div>';
+    }
+    row('Room ID', roomId);
+    row('Connection', room ? room.state : 'not connected');
+    if (dbgData.livekit_url) row('LK URL', dbgData.livekit_url);
+    if (dbgData.livekit_room) row('LK Room (grant)', dbgData.livekit_room);
+    if (dbgData.debug) {
+      row('Alias input', dbgData.debug.alias_input);
+      row('LK identity', dbgData.debug.lk_identity);
+      row('Device ID', dbgData.debug.device_id);
+      row('State key', dbgData.debug.state_key);
+      row('LK service URL', dbgData.debug.lk_service_url);
+    }
+    if (room && room.name) row('LK Room (actual)', room.name);
+    if (room && room.sid) row('LK Room SID', room.sid);
+    if (room && room.localParticipant) {
+      row('Local identity', room.localParticipant.identity);
+      row('Local SID', room.localParticipant.sid);
+      var pubs = [];
+      room.localParticipant.trackPublications.forEach(function(p) {
+        pubs.push(p.source + ':' + p.kind + (p.isMuted ? '(muted)' : ''));
+      });
+      row('Local tracks', pubs.join(', ') || 'none');
+    }
+    el.innerHTML = html;
+  }
+
+  function dbgUpdateParticipants() {
+    var el = document.getElementById('dbgParticipants');
+    if (!room) { el.innerHTML = '<div class="dbg-row">Not connected</div>'; return; }
+    var html = '';
+    html += '<div class="dbg-row"><span class="dbg-key">Local:</span> <span class="dbg-val">' +
+      (room.localParticipant.identity || '?') + ' (' + (room.localParticipant.name || '?') + ')</span></div>';
+    room.remoteParticipants.forEach(function(p) {
+      var tracks = [];
+      p.trackPublications.forEach(function(pub) {
+        tracks.push(pub.source + ':' + pub.kind + (pub.isSubscribed ? '' : '(unsub)') + (pub.isMuted ? '(muted)' : ''));
+      });
+      html += '<div class="dbg-row"><span class="dbg-key">' + (p.name || p.identity) + ':</span> <span class="dbg-val">' +
+        p.identity + ' [' + (tracks.join(', ') || 'no tracks') + ']</span></div>';
+    });
+    if (room.remoteParticipants.size === 0) {
+      html += '<div class="dbg-row dbg-warn">No remote participants in this LK room</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  // SHA-256 + unpadded base64 in browser
+  async function computeAlias(input) {
+    var enc = new TextEncoder();
+    var hash = await crypto.subtle.digest('SHA-256', enc.encode(input));
+    var bytes = new Uint8Array(hash);
+    var binary = '';
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    // Standard base64, strip padding
+    return btoa(binary).replace(/=+$/, '');
+  }
+
+  document.getElementById('dbgRoomId').textContent = roomId;
+
+  document.getElementById('dbgCalcHash').addEventListener('click', async function() {
+    var suffix = document.getElementById('dbgSuffix').value;
+    var input = roomId + '|' + suffix;
+    var alias = await computeAlias(input);
+    var result = 'Input: ' + input + '\nAlias: ' + alias;
+    if (dbgData.livekit_room) {
+      result += '\nJWT room: ' + dbgData.livekit_room;
+      result += '\nMatch: ' + (alias === dbgData.livekit_room ? 'YES' : 'NO — MISMATCH!');
+    }
+    document.getElementById('dbgHashResult').textContent = result;
+  });
+
+  document.getElementById('dbgReconnect').addEventListener('click', async function() {
+    var customAlias = document.getElementById('dbgCustomAlias').value.trim();
+    if (!customAlias || !dbgData.livekit_url) {
+      document.getElementById('dbgReconnectResult').textContent = 'Need alias and a previous join';
+      return;
+    }
+    dbgLog('Reconnecting to custom room: ' + customAlias);
+    // We need a new JWT for the custom room — re-join with override
+    try {
+      var resp = await fetch('./join', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({room_id: roomId, display_name: room ? room.localParticipant.name : 'Debug'}),
+      });
+      var data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Join failed');
+      // Note: JWT is locked to the room alias in the grant, so we can only
+      // test with the alias the server computed. Log the mismatch.
+      document.getElementById('dbgReconnectResult').textContent =
+        'JWT room: ' + data.livekit_room + '\nCustom: ' + customAlias +
+        '\n⚠ JWT grants are room-locked — to test a different alias, the server must compute it.';
+    } catch (err) {
+      document.getElementById('dbgReconnectResult').textContent = 'Error: ' + err.message;
+    }
+  });
+
+  // Toggle with Ctrl+D
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'd') {
+      e.preventDefault();
+      document.getElementById('debugPanel').classList.toggle('open');
+      dbgUpdateInfo();
+      dbgUpdateParticipants();
+    }
+  });
+
+  // Hook into join flow to capture debug data
+  var _origFetch = window.fetch;
+  window.fetch = async function() {
+    var resp = await _origFetch.apply(this, arguments);
+    if (arguments[0] === './join') {
+      var clone = resp.clone();
+      clone.json().then(function(data) {
+        dbgData = data;
+        dbgLog('Join response: room=' + data.livekit_room + ' url=' + data.livekit_url);
+        dbgUpdateInfo();
+      }).catch(function(){});
+    }
+    return resp;
+  };
+
+  // Periodic debug refresh while connected
+  setInterval(function() {
+    if (room && document.getElementById('debugPanel').classList.contains('open')) {
+      dbgUpdateInfo();
+      dbgUpdateParticipants();
+    }
+  }, 2000);
+
+  // Hook room events for debug log
+  var _origStartCall = startCall;
+  // We can't easily wrap startCall, so hook into room events after connect.
+  // The RoomEvent hooks above already exist; add debug logging via MutationObserver on videoGrid.
+  var gridObserver = new MutationObserver(function() {
+    dbgUpdateParticipants();
+  });
+  gridObserver.observe(videoGrid, {childList: true, subtree: true});
 })();
 </script>
 </body>

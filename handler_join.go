@@ -179,6 +179,16 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		"session_id":   sessionID,
 		"ec_url":       ecURL,
 		"expires_at":   expiresAt,
+		// Debug info
+		"debug": map[string]interface{}{
+			"matrix_room_id":  body.RoomID,
+			"lk_room_alias":   lkRoom,
+			"lk_identity":     lkIdent,
+			"device_id":       deviceID,
+			"state_key":       stateKey,
+			"lk_service_url":  svc.Config.LiveKitServiceURL,
+			"alias_input":     body.RoomID + "|m.call#ROOM",
+		},
 	})
 }
 
