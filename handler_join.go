@@ -90,10 +90,6 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	sessionID := uuid.New().String()
 	deviceID := fmt.Sprintf("GUEST_%s", uuid.New().String()[:8])
 
-	// Compute LiveKit room alias and participant identity
-	lkRoom := LiveKitRoomAliasForMode(body.RoomID, svc.Config.LiveKitRoomAliasMode)
-	lkIdent := LiveKitIdentity(svc.BotUserID, deviceID, sessionID)
-
 	// Compute state key: _@bot:server_DEVICE_ID
 	stateKey := fmt.Sprintf("_%s_%s", svc.BotUserID, deviceID)
 
@@ -101,21 +97,17 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	ttlSeconds := svc.Config.GuestTokenTTL
 	expiresMS := ttlSeconds * 1000
 
-	// Issue LiveKit JWT
-	jwtToken, err := MakeGuestJWT(
-		svc.Config.LiveKitAPIKey,
-		svc.Config.LiveKitAPISecret,
-		lkRoom,
-		lkIdent,
-		displayName,
-		ttlSeconds,
+	// Resolve active focus and get LiveKit JWT
+	jwtToken, livekitURL, lkRoom, err := svc.GetGuestToken(
+		ctx, body.RoomID, roomID, deviceID, sessionID, displayName, ttlSeconds,
 	)
 	if err != nil {
-		log.Printf("Failed to create JWT: %v", err)
+		log.Printf("Failed to get guest token: %v", err)
 		AddCORSHeaders(w, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
 		return
 	}
+	lkIdent := LiveKitIdentity(svc.BotUserID, deviceID, sessionID)
 
 	// Compute expiry timestamp
 	expiresAt := time.Now().Unix() + int64(ttlSeconds)
@@ -145,7 +137,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	if err := SendCallMember(
 		ctx, svc.Client, roomID, stateKey,
 		deviceID, sessionID,
-		svc.Config.LiveKitServiceURL, expiresMS,
+		svc.Config.LiveKitServiceURL, body.RoomID, expiresMS,
 	); err != nil {
 		log.Printf("Failed to send call.member event: %v", err)
 		// Still return the JWT so the guest can connect to LiveKit
@@ -163,7 +155,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		"roomId":             {body.RoomID},
 		"livekitToken":       {jwtToken},
 		"livekitRoom":        {lkRoom},
-		"livekitUrl":         {svc.Config.LiveKitURL},
+		"livekitUrl":         {livekitURL},
 		"displayName":        {displayName},
 		"skipLobby":          {"true"},
 		"header":             {"none"},
@@ -174,7 +166,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	AddCORSHeaders(w, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"jwt":          jwtToken,
-		"livekit_url":  svc.Config.LiveKitURL,
+		"livekit_url":  livekitURL,
 		"livekit_room": lkRoom,
 		"session_id":   sessionID,
 		"ec_url":       ecURL,

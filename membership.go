@@ -26,6 +26,7 @@ func SendCallMember(
 	deviceID string,
 	sessionID string,
 	lkServiceURL string,
+	lkAlias string,
 	expiresMS int,
 ) error {
 	content := map[string]interface{}{
@@ -42,6 +43,7 @@ func SendCallMember(
 		"foci_preferred": []map[string]interface{}{
 			{
 				"type":               "livekit",
+				"livekit_alias":      lkAlias,
 				"livekit_service_url": lkServiceURL,
 			},
 		},
