@@ -353,6 +353,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   let guestSessionId = null;
   let currentBreakoutId = breakoutId || null;
   let displayName = '';
+  let intentionalDisconnect = false;
   const btnBreakout = document.getElementById('btnBreakout');
   const breakoutPanel = document.getElementById('breakoutPanel');
 
@@ -585,7 +586,7 @@ const guestPageTemplate = `<!DOCTYPE html>
     });
 
     room.on(LK.RoomEvent.Disconnected, function() {
-      leaveCall();
+      if (!intentionalDisconnect) leaveCall();
     });
 
     room.on(LK.RoomEvent.ConnectionStateChanged, function(state) {
@@ -750,7 +751,9 @@ const guestPageTemplate = `<!DOCTYPE html>
       var data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Move failed');
       // Disconnect from current room and reconnect to breakout
+      intentionalDisconnect = true;
       if (room) { room.disconnect(); room = null; }
+      intentionalDisconnect = false;
       currentBreakoutId = targetBreakoutId;
       var wasAudio = micEnabled, wasVideo = camEnabled;
       await startCall(data.livekit_url, data.jwt, displayName, wasAudio, wasVideo);
@@ -773,7 +776,9 @@ const guestPageTemplate = `<!DOCTYPE html>
       if (!resp.ok) throw new Error(data.error || 'Rejoin failed');
       guestSessionId = data.session_id;
       currentBreakoutId = null;
+      intentionalDisconnect = true;
       if (room) { room.disconnect(); room = null; }
+      intentionalDisconnect = false;
       var wasAudio = micEnabled, wasVideo = camEnabled;
       await startCall(data.livekit_url, data.jwt, displayName, wasAudio, wasVideo);
       breakoutPanel.style.display = 'none';
