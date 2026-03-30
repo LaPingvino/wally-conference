@@ -352,6 +352,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   let screenEnabled = false;
   let guestSessionId = null;
   let currentBreakoutId = breakoutId || null;
+  let displayName = '';
   const btnBreakout = document.getElementById('btnBreakout');
   const breakoutPanel = document.getElementById('breakoutPanel');
 
@@ -480,7 +481,7 @@ const guestPageTemplate = `<!DOCTYPE html>
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    const displayName = nameInput.value.trim();
+    displayName = nameInput.value.trim();
     if (!displayName) return;
     btn.disabled = true;
     btn.textContent = 'Requesting media access\u2026';
