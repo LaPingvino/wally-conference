@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -78,9 +77,8 @@ func main() {
 		DB:        db,
 		Client:    client,
 		BotUserID: botUserID,
-		Limiter:       NewRateLimiter(cfg.RateLimitPerMinute),
-		StartedAt:     time.Now(),
-		repliedEvents: make(map[string]bool),
+		Limiter:   NewRateLimiter(cfg.RateLimitPerMinute),
+		StartedAt: time.Now(),
 	}
 
 	// Register Matrix event handler for bot commands
@@ -176,8 +174,4 @@ type Service struct {
 	Limiter   *RateLimiter
 	StartedAt time.Time
 
-	// repliedEvents tracks event IDs the bot has already replied to,
-	// preventing duplicate command execution on sync replays after restart.
-	repliedMu     sync.Mutex
-	repliedEvents map[string]bool
 }

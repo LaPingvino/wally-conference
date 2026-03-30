@@ -32,31 +32,11 @@ func (svc *Service) HandleMatrixMessage(ctx context.Context, evt *event.Event) {
 		return
 	}
 
-	// Deduplicate: skip if we already replied to this event.
-	// In-memory set handles the common case (same run). For restart replays,
-	// check if the bot already sent a message in this room after the command.
-	evtID := evt.ID.String()
-	svc.repliedMu.Lock()
-	if svc.repliedEvents[evtID] {
-		svc.repliedMu.Unlock()
+	// Deduplicate: if the bot already sent any message after this command, skip it.
+	// Handles restart replays without needing persistent state.
+	if svc.botAlreadyReplied(ctx, evt) {
 		return
 	}
-	svc.repliedMu.Unlock()
-
-	// For events from before startup, check timeline for an existing bot reply
-	if evt.Timestamp < svc.StartedAt.UnixMilli() {
-		if svc.botAlreadyReplied(ctx, evt) {
-			svc.repliedMu.Lock()
-			svc.repliedEvents[evtID] = true
-			svc.repliedMu.Unlock()
-			return
-		}
-	}
-
-	// Mark as replied before executing (prevents races with concurrent syncs)
-	svc.repliedMu.Lock()
-	svc.repliedEvents[evtID] = true
-	svc.repliedMu.Unlock()
 
 	parts := strings.Fields(body)
 	if len(parts) < 2 {
