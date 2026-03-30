@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -75,7 +74,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	// Check guest capacity
 	activeCount, err := CountActiveSessions(svc.DB, body.RoomID)
 	if err != nil {
-		log.Printf("Error counting sessions: %v", err)
+		logf("join", "Error counting sessions: %v", err)
 		AddCORSHeaders(w, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
@@ -98,11 +97,11 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	expiresMS := ttlSeconds * 1000
 
 	// Resolve active focus and get LiveKit JWT
-	jwtToken, livekitURL, lkRoom, err := svc.GetGuestToken(
+	jwtToken, livekitURL, lkRoom, tokenMeta, err := svc.GetGuestToken(
 		ctx, body.RoomID, roomID, deviceID, sessionID, displayName, ttlSeconds,
 	)
 	if err != nil {
-		log.Printf("Failed to get guest token: %v", err)
+		logf("join", "Failed to get guest token: %v", err)
 		AddCORSHeaders(w, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
 		return
@@ -127,7 +126,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		StateKey:    stateKey,
 	}
 	if err := CreateSession(svc.DB, session); err != nil {
-		log.Printf("Failed to create session: %v", err)
+		logf("join", "Failed to create session: %v", err)
 		AddCORSHeaders(w, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
@@ -139,7 +138,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		deviceID, sessionID,
 		svc.Config.LiveKitServiceURL, body.RoomID, expiresMS,
 	); err != nil {
-		log.Printf("Failed to send call.member event: %v", err)
+		logf("join", "Failed to send call.member event: %v", err)
 		// Still return the JWT so the guest can connect to LiveKit
 	}
 
@@ -173,13 +172,18 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		"expires_at":   expiresAt,
 		// Debug info
 		"debug": map[string]interface{}{
-			"matrix_room_id":  body.RoomID,
-			"lk_room_alias":   lkRoom,
-			"lk_identity":     lkIdent,
-			"device_id":       deviceID,
-			"state_key":       stateKey,
-			"lk_service_url":  svc.Config.LiveKitServiceURL,
-			"alias_input":     body.RoomID + "|m.call#ROOM",
+			"matrix_room_id":      body.RoomID,
+			"lk_room_alias":       lkRoom,
+			"lk_identity":         lkIdent,
+			"device_id":           deviceID,
+			"state_key":           stateKey,
+			"lk_service_url":      svc.Config.LiveKitServiceURL,
+			"alias_input":         body.RoomID + "|m.call#ROOM",
+			"focus_source":        tokenMeta.FocusSource,
+			"alias_mode":          svc.Config.LiveKitRoomAliasMode,
+			"alias_hash":          LiveKitRoomAlias(body.RoomID),
+			"alias_raw":           body.RoomID,
+			"call_members_count":  tokenMeta.ActiveMembers,
 		},
 	})
 }

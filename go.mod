@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/google/uuid v1.6.0
 	github.com/livekit/protocol v1.45.1
+	github.com/livekit/server-sdk-go/v2 v2.16.1
 	gopkg.in/yaml.v3 v3.0.1
 	maunium.net/go/mautrix v0.26.4
 	modernc.org/sqlite v1.47.0
@@ -41,7 +42,6 @@ require (
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731 // indirect
 	github.com/livekit/mediatransportutil v0.0.0-20251128105421-19c7a7b81c22 // indirect
 	github.com/livekit/psrpc v0.7.1 // indirect
-	github.com/livekit/server-sdk-go/v2 v2.16.1 // indirect
 	github.com/magefile/mage v1.15.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

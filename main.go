@@ -78,6 +78,7 @@ func main() {
 		Client:    client,
 		BotUserID: botUserID,
 		Limiter:   NewRateLimiter(cfg.RateLimitPerMinute),
+		StartedAt: time.Now(),
 	}
 
 	// Register Matrix event handler for bot commands
@@ -119,6 +120,7 @@ func main() {
 	mux.HandleFunc("POST /webhook", svc.HandleWebhook)
 	mux.HandleFunc("GET /health", svc.HandleHealth)
 	mux.HandleFunc("GET /guest/debug/{roomID}", svc.HandleDebug)
+	mux.HandleFunc("GET /guest/debug/{roomID}/join-trace", svc.HandleJoinTrace)
 
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddress,
@@ -170,4 +172,5 @@ type Service struct {
 	Client    *mautrix.Client
 	BotUserID string
 	Limiter   *RateLimiter
+	StartedAt time.Time
 }
