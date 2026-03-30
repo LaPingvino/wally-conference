@@ -493,18 +493,17 @@ func (svc *Service) isModerator(ctx context.Context, roomID id.RoomID, userID id
 	return pl.GetUserLevel(userID) >= 50
 }
 
-// botAlreadyReplied checks the room timeline after an event to see if the bot
-// already sent a message in response. Looks at the next few messages after the
-// command event timestamp — if any are from the bot, assume already handled.
+// botAlreadyReplied checks if the bot already responded to a command by
+// fetching recent messages and looking for a bot message after the command.
 func (svc *Service) botAlreadyReplied(ctx context.Context, evt *event.Event) bool {
-	// Fetch recent messages from the room
-	msgs, err := svc.Client.Messages(ctx, evt.RoomID, "", "", 'f', nil, 10)
+	// Fetch recent messages backwards from the live end of the timeline
+	msgs, err := svc.Client.Messages(ctx, evt.RoomID, "", "", 'b', nil, 50)
 	if err != nil {
-		return false // can't check, allow the command through
+		return false
 	}
 	botID := id.UserID(svc.BotUserID)
 	for _, msg := range msgs.Chunk {
-		// Look for bot messages sent after the command
+		// Any bot message sent after the command timestamp = already replied
 		if msg.Sender == botID && msg.Timestamp > evt.Timestamp {
 			return true
 		}
