@@ -72,9 +72,14 @@ func startupCleanup(ctx context.Context, svc *Service) {
 				continue // already cleared or unparseable
 			}
 
-			// Clear all bot call.member events on startup — any leftover
-			// from a previous run is stale (no delayed leave event support yet)
-			logf("cleanup", "Clearing bot call.member in %s (state_key=%s)", roomID, stateKey)
+			// Check if there's a matching active session in the DB
+			session, _ := GetSessionByStateKey(svc.DB, stateKey)
+			if session != nil {
+				continue // active session, leave it
+			}
+
+			// Orphaned: clear it
+			logf("cleanup", "Clearing orphaned call.member in %s (state_key=%s)", roomID, stateKey)
 			if err := ClearCallMember(ctx, svc.Client, roomID, stateKey); err != nil {
 				logf("cleanup", "Failed to clear call.member: %v", err)
 			} else {
