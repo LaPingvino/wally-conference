@@ -184,6 +184,80 @@ func (svc *Service) moveToBreakout(sessionID, breakoutID string) (map[string]str
 	}, nil
 }
 
+// HandleBreakoutJoin lets an authenticated Matrix user get a JWT for a breakout room.
+// POST /guest/breakout/join — body: { breakout_id, openid_token: { access_token, ... }, device_id }
+func (svc *Service) HandleBreakoutJoin(w http.ResponseWriter, r *http.Request) {
+	SetCORS(w, r, svc.Config.AllowedOrigins)
+
+	var body struct {
+		BreakoutID  string `json:"breakout_id"`
+		DeviceID    string `json:"device_id"`
+		OpenIDToken struct {
+			AccessToken      string `json:"access_token"`
+			TokenType        string `json:"token_type"`
+			MatrixServerName string `json:"matrix_server_name"`
+			ExpiresIn        int    `json:"expires_in"`
+		} `json:"openid_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+
+	if body.BreakoutID == "" || body.OpenIDToken.AccessToken == "" || body.DeviceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "breakout_id, device_id, and openid_token are required"})
+		return
+	}
+
+	// Verify the OpenID token with the user's homeserver
+	verifyURL := fmt.Sprintf("https://%s/_matrix/federation/v1/openid/userinfo?access_token=%s",
+		body.OpenIDToken.MatrixServerName, url.QueryEscape(body.OpenIDToken.AccessToken))
+	resp, err := http.Get(verifyURL)
+	if err != nil || resp.StatusCode != 200 {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Failed to verify OpenID token"})
+		return
+	}
+	defer resp.Body.Close()
+	var userInfo struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil || userInfo.Sub == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid OpenID token"})
+		return
+	}
+
+	// Look up breakout
+	breakout, err := GetBreakout(svc.DB, body.BreakoutID)
+	if err != nil || breakout == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Breakout not found"})
+		return
+	}
+	if breakout.EndedAt.Valid {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Breakout has ended"})
+		return
+	}
+
+	// Create JWT with the user's real identity
+	lkIdent := LiveKitIdentity(userInfo.Sub, body.DeviceID)
+	displayName := userInfo.Sub // Best we have without profile lookup
+	jwtToken, err := MakeGuestJWT(
+		svc.Config.LiveKitAPIKey, svc.Config.LiveKitAPISecret,
+		breakout.LKAlias, lkIdent, displayName, svc.Config.GuestTokenTTL,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"jwt":          jwtToken,
+		"livekit_url":  svc.Config.LiveKitURL,
+		"livekit_room": breakout.LKAlias,
+		"breakout_id":  body.BreakoutID,
+		"user_id":      userInfo.Sub,
+	})
+}
+
 // HandleBreakoutList handles GET /guest/breakout/list/{roomID}.
 func (svc *Service) HandleBreakoutList(w http.ResponseWriter, r *http.Request) {
 	allowedOrigins := svc.Config.AllowedOrigins
