@@ -178,6 +178,7 @@ func (svc *Service) moveToBreakout(sessionID, breakoutID string) (map[string]str
 
 	return map[string]string{
 		"jwt":          jwtToken,
+		"livekit_url":  svc.Config.LiveKitURL,
 		"livekit_room": lkRoom,
 		"ec_url":       ecURL,
 	}, nil

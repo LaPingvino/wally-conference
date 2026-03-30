@@ -257,10 +257,22 @@ const guestPageTemplate = `<!DOCTYPE html>
     <button class="tb-btn" id="btnScreen" title="Share screen">
       <svg viewBox="0 0 24 24"><path d="M20 3H4a2 2 0 00-2 2v11a2 2 0 002 2h7v2H8v2h8v-2h-3v-2h7a2 2 0 002-2V5a2 2 0 00-2-2zm0 13H4V5h16v11z"/></svg>
     </button>
+    <button class="tb-btn" id="btnBreakout" title="Breakout rooms" style="position:relative">
+      <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+    </button>
     <button class="tb-btn hangup" id="btnHangup" title="Leave call">
       <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 010-1.36C3.46 8.83 7.49 7 12 7s8.54 1.83 11.71 4.72c.18.18.29.44.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 00-2.67-1.85.996.996 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
     </button>
     <span class="toolbar-watermark">Wally</span>
+  </div>
+  <!-- Breakout panel (hidden by default) -->
+  <div id="breakoutPanel" style="display:none;position:absolute;bottom:60px;left:50%%;transform:translateX(-50%%);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;min-width:240px;max-width:320px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong style="font-size:.9em">Breakout Rooms</strong>
+      <span id="breakoutClose" style="cursor:pointer;font-size:1.2em">&times;</span>
+    </div>
+    <div id="breakoutList" style="max-height:200px;overflow-y:auto;margin-bottom:8px"><em style="opacity:.6;font-size:.85em">Loading...</em></div>
+    <button id="btnReturnMain" class="join-btn" style="width:100%%;font-size:.85em;padding:6px">Return to Main Room</button>
   </div>
 </div>
 
@@ -338,6 +350,10 @@ const guestPageTemplate = `<!DOCTYPE html>
   let micEnabled = true;
   let camEnabled = true;
   let screenEnabled = false;
+  let guestSessionId = null;
+  let currentBreakoutId = breakoutId || null;
+  const btnBreakout = document.getElementById('btnBreakout');
+  const breakoutPanel = document.getElementById('breakoutPanel');
 
   // ── Helpers ──
 
@@ -505,6 +521,7 @@ const guestPageTemplate = `<!DOCTYPE html>
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Join failed');
+      guestSessionId = data.session_id;
       await startCall(data.livekit_url, data.jwt, displayName, hasAudio, hasVideo);
     } catch (err) {
       showStatus(err.message, true);
@@ -677,6 +694,93 @@ const guestPageTemplate = `<!DOCTYPE html>
     btnCam.classList.remove('active');
     btnScreen.classList.remove('active');
   }
+  // ── Breakout rooms ──
+
+  btnBreakout.addEventListener('click', function() {
+    var isOpen = breakoutPanel.style.display !== 'none';
+    breakoutPanel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) loadBreakouts();
+  });
+  document.getElementById('breakoutClose').addEventListener('click', function() {
+    breakoutPanel.style.display = 'none';
+  });
+
+  async function loadBreakouts() {
+    var list = document.getElementById('breakoutList');
+    list.innerHTML = '<em style="opacity:.6;font-size:.85em">Loading...</em>';
+    try {
+      var resp = await fetch('./breakout/list/' + encodeURIComponent(roomId));
+      if (!resp.ok) { list.innerHTML = '<em style="opacity:.6;font-size:.85em">Not available</em>'; return; }
+      var data = await resp.json();
+      var breakouts = data.breakouts || [];
+      if (breakouts.length === 0) {
+        list.innerHTML = '<em style="opacity:.6;font-size:.85em">No breakout rooms</em>';
+        return;
+      }
+      list.innerHTML = '';
+      breakouts.forEach(function(br) {
+        var div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)';
+        var info = document.createElement('span');
+        info.style.cssText = 'font-size:.85em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1';
+        info.textContent = (br.topic || br.id) + ' (' + br.participants + ')';
+        var joinBtn = document.createElement('button');
+        joinBtn.textContent = currentBreakoutId === br.id ? 'Current' : 'Join';
+        joinBtn.disabled = currentBreakoutId === br.id;
+        joinBtn.style.cssText = 'margin-left:8px;padding:2px 10px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:.8em';
+        joinBtn.addEventListener('click', function() { moveToBreakout(br.id); });
+        div.appendChild(info);
+        div.appendChild(joinBtn);
+        list.appendChild(div);
+      });
+    } catch (err) {
+      list.innerHTML = '<em style="opacity:.6;font-size:.85em">Error: ' + err.message + '</em>';
+    }
+  }
+
+  async function moveToBreakout(targetBreakoutId) {
+    if (!guestSessionId) { alert('No active session'); return; }
+    try {
+      var resp = await fetch('./breakout/move', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: guestSessionId, breakout_id: targetBreakoutId}),
+      });
+      var data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Move failed');
+      // Disconnect from current room and reconnect to breakout
+      if (room) { room.disconnect(); room = null; }
+      currentBreakoutId = targetBreakoutId;
+      var wasAudio = micEnabled, wasVideo = camEnabled;
+      await startCall(data.livekit_url, data.jwt, displayName, wasAudio, wasVideo);
+      breakoutPanel.style.display = 'none';
+    } catch (err) {
+      alert('Failed to move: ' + err.message);
+    }
+  }
+
+  document.getElementById('btnReturnMain').addEventListener('click', async function() {
+    if (!guestSessionId || !currentBreakoutId) return;
+    // Re-join main room by creating a new session
+    try {
+      var resp = await fetch('./join', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({room_id: roomId, display_name: displayName}),
+      });
+      var data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Rejoin failed');
+      guestSessionId = data.session_id;
+      currentBreakoutId = null;
+      if (room) { room.disconnect(); room = null; }
+      var wasAudio = micEnabled, wasVideo = camEnabled;
+      await startCall(data.livekit_url, data.jwt, displayName, wasAudio, wasVideo);
+      breakoutPanel.style.display = 'none';
+    } catch (err) {
+      alert('Failed to return: ' + err.message);
+    }
+  });
+
   // ── Debug panel ──
 
   var dbgData = {};  // stored join response
