@@ -294,7 +294,7 @@ func (svc *Service) HandleJoinTrace(w http.ResponseWriter, r *http.Request) {
 	// Simulate identifiers
 	fakeSessionID := uuid.New().String()
 	fakeDeviceID := fmt.Sprintf("GUEST_%s", uuid.New().String()[:8])
-	fakeStateKey := fmt.Sprintf("_%s_%s", svc.BotUserID, fakeDeviceID)
+	fakeStateKey := fmt.Sprintf("_%s_%s_m.call", svc.BotUserID, fakeDeviceID)
 	lkIdent := LiveKitIdentity(svc.BotUserID, fakeDeviceID)
 
 	// Compute LK room alias

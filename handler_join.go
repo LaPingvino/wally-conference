@@ -89,8 +89,9 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	sessionID := uuid.New().String()
 	deviceID := fmt.Sprintf("GUEST_%s", uuid.New().String()[:8])
 
-	// Compute state key: _@bot:server_DEVICE_ID
-	stateKey := fmt.Sprintf("_%s_%s", svc.BotUserID, deviceID)
+	// Compute state key: _@bot:server_DEVICE_ID_m.call
+	// Must include application+call_id suffix to match matrix-js-sdk's MembershipManager format.
+	stateKey := fmt.Sprintf("_%s_%s_m.call", svc.BotUserID, deviceID)
 
 	// Token TTL
 	ttlSeconds := svc.Config.GuestTokenTTL
