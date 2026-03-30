@@ -182,3 +182,101 @@ func (svc *Service) moveToBreakout(sessionID, breakoutID string) (map[string]str
 		"ec_url":       ecURL,
 	}, nil
 }
+
+// HandleBreakoutList handles GET /guest/breakout/list/{roomID}.
+func (svc *Service) HandleBreakoutList(w http.ResponseWriter, r *http.Request) {
+	allowedOrigins := svc.Config.AllowedOrigins
+
+	rawRoomID := r.PathValue("roomID")
+	if rawRoomID == "" {
+		AddCORSHeaders(w, allowedOrigins)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing room ID"})
+		return
+	}
+	roomID, err := url.PathUnescape(rawRoomID)
+	if err != nil {
+		roomID = rawRoomID
+	}
+
+	breakouts, err := GetActiveBreakouts(svc.DB, roomID)
+	if err != nil {
+		AddCORSHeaders(w, allowedOrigins)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
+		return
+	}
+
+	var result []map[string]interface{}
+	for _, br := range breakouts {
+		sessions, _ := GetSessionsForBreakout(svc.DB, br.ID)
+		topic := ""
+		if br.Topic.Valid {
+			topic = br.Topic.String
+		}
+		result = append(result, map[string]interface{}{
+			"id":           br.ID,
+			"topic":        topic,
+			"created_by":   br.CreatedBy,
+			"created_at":   br.CreatedAt,
+			"participants": len(sessions),
+		})
+	}
+
+	if result == nil {
+		result = []map[string]interface{}{}
+	}
+
+	AddCORSHeaders(w, allowedOrigins)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"room_id":   roomID,
+		"breakouts": result,
+	})
+}
+
+// HandleBreakoutEnd handles POST /guest/breakout/end.
+func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
+	allowedOrigins := svc.Config.AllowedOrigins
+
+	var body struct {
+		BreakoutID string `json:"breakout_id"`
+		UserID     string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		AddCORSHeaders(w, allowedOrigins)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+
+	if body.BreakoutID == "" {
+		AddCORSHeaders(w, allowedOrigins)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "breakout_id is required"})
+		return
+	}
+
+	breakout, err := GetBreakout(svc.DB, body.BreakoutID)
+	if err != nil || breakout == nil {
+		AddCORSHeaders(w, allowedOrigins)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Breakout not found"})
+		return
+	}
+	if breakout.EndedAt.Valid {
+		AddCORSHeaders(w, allowedOrigins)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Breakout already ended"})
+		return
+	}
+
+	// Clean up guest sessions
+	ctx := context.Background()
+	sessions, _ := GetSessionsForBreakout(svc.DB, body.BreakoutID)
+	for _, session := range sessions {
+		ClearCallMember(ctx, svc.Client, id.RoomID(session.RoomID), session.StateKey)
+		DeleteSession(svc.DB, session.ID)
+	}
+
+	EndBreakoutDB(svc.DB, body.BreakoutID)
+
+	AddCORSHeaders(w, allowedOrigins)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":      "ended",
+		"breakout_id": body.BreakoutID,
+	})
+}

@@ -114,6 +114,10 @@ func main() {
 	mux.HandleFunc("OPTIONS /guest/breakout/create", svc.HandleCORSPreflight)
 	mux.HandleFunc("POST /guest/breakout/move", svc.HandleBreakoutMove)
 	mux.HandleFunc("OPTIONS /guest/breakout/move", svc.HandleCORSPreflight)
+	mux.HandleFunc("GET /guest/breakout/list/{roomID}", svc.HandleBreakoutList)
+	mux.HandleFunc("OPTIONS /guest/breakout/list/{roomID}", svc.HandleCORSPreflight)
+	mux.HandleFunc("POST /guest/breakout/end", svc.HandleBreakoutEnd)
+	mux.HandleFunc("OPTIONS /guest/breakout/end", svc.HandleCORSPreflight)
 	// Keep legacy /join for backwards compat
 	mux.HandleFunc("POST /join", svc.HandleJoin)
 	mux.HandleFunc("OPTIONS /join", svc.HandleCORSPreflight)

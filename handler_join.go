@@ -97,17 +97,50 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	ttlSeconds := svc.Config.GuestTokenTTL
 	expiresMS := ttlSeconds * 1000
 
-	// Resolve active focus and get LiveKit JWT
-	jwtToken, livekitURL, lkRoom, tokenMeta, err := svc.GetGuestToken(
-		ctx, body.RoomID, roomID, deviceID, sessionID, displayName, ttlSeconds,
-	)
-	if err != nil {
-		logf("join", "Failed to get guest token: %v", err)
-		AddCORSHeaders(w, allowedOrigins)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
-		return
-	}
+	var jwtToken, livekitURL, lkRoom string
+	var tokenMeta TokenMeta
 	lkIdent := LiveKitIdentity(svc.BotUserID, deviceID)
+
+	if body.BreakoutID != "" {
+		// Guest is joining a breakout room — use breakout's LK alias
+		breakout, brErr := GetBreakout(svc.DB, body.BreakoutID)
+		if brErr != nil || breakout == nil {
+			AddCORSHeaders(w, allowedOrigins)
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Breakout not found"})
+			return
+		}
+		if breakout.EndedAt.Valid {
+			AddCORSHeaders(w, allowedOrigins)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Breakout has ended"})
+			return
+		}
+		lkRoom = breakout.LKAlias
+		livekitURL = svc.Config.LiveKitURL
+		var jwtErr error
+		jwtToken, jwtErr = MakeGuestJWT(
+			svc.Config.LiveKitAPIKey, svc.Config.LiveKitAPISecret,
+			lkRoom, lkIdent, displayName, ttlSeconds,
+		)
+		if jwtErr != nil {
+			logf("join", "Failed to create breakout JWT: %v", jwtErr)
+			AddCORSHeaders(w, allowedOrigins)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
+			return
+		}
+		tokenMeta = TokenMeta{FocusSource: "breakout", ActiveMembers: 0}
+	} else {
+		// Normal join — resolve active focus
+		var err error
+		jwtToken, livekitURL, lkRoom, tokenMeta, err = svc.GetGuestToken(
+			ctx, body.RoomID, roomID, deviceID, sessionID, displayName, ttlSeconds,
+		)
+		if err != nil {
+			logf("join", "Failed to get guest token: %v", err)
+			AddCORSHeaders(w, allowedOrigins)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
+			return
+		}
+	}
 
 	// Compute expiry timestamp
 	expiresAt := time.Now().Unix() + int64(ttlSeconds)

@@ -232,6 +232,7 @@ const guestPageTemplate = `<!DOCTYPE html>
     <span>Wally Conference</span>
   </div>
   <p class="subtitle">%s</p>
+  <p id="breakoutLabel" style="display:none;text-align:center;font-size:.85em;padding:4px 12px;border-radius:6px;background:var(--accent);color:#fff;margin:0 0 8px"></p>
   <form id="joinForm">
     <label for="name">Your name</label>
     <input id="name" type="text" placeholder="Enter your display name" maxlength="50" required autofocus>
@@ -312,6 +313,12 @@ const guestPageTemplate = `<!DOCTYPE html>
   });
 
   const roomId = %q;
+  const breakoutId = new URLSearchParams(window.location.search).get('breakout') || '';
+  if (breakoutId) {
+    var lbl = document.getElementById('breakoutLabel');
+    lbl.textContent = 'Breakout Room: ' + breakoutId;
+    lbl.style.display = 'block';
+  }
   const form = document.getElementById('joinForm');
   const nameInput = document.getElementById('name');
   const btn = document.getElementById('joinBtn');
@@ -494,7 +501,7 @@ const guestPageTemplate = `<!DOCTYPE html>
       const resp = await fetch('./join', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({room_id: roomId, display_name: displayName}),
+        body: JSON.stringify({room_id: roomId, display_name: displayName, breakout_id: breakoutId || undefined}),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Join failed');
