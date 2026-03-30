@@ -106,7 +106,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
 		return
 	}
-	lkIdent := LiveKitIdentity(svc.BotUserID, deviceID, sessionID)
+	lkIdent := LiveKitIdentity(svc.BotUserID, deviceID)
 
 	// Compute expiry timestamp
 	expiresAt := time.Now().Unix() + int64(ttlSeconds)

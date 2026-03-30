@@ -225,7 +225,7 @@ func (svc *Service) GetGuestToken(
 	if serviceURL == svc.Config.LiveKitServiceURL {
 		meta.FocusSource = "local"
 		lkRoom = LiveKitRoomAliasForMode(matrixRoomID, svc.Config.LiveKitRoomAliasMode)
-		lkIdent := LiveKitIdentity(svc.BotUserID, deviceID, sessionID)
+		lkIdent := LiveKitIdentity(svc.BotUserID, deviceID)
 		jwt, err = MakeGuestJWT(
 			svc.Config.LiveKitAPIKey,
 			svc.Config.LiveKitAPISecret,

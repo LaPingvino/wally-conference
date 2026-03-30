@@ -66,45 +66,29 @@ func TestLivekitRoomAlias_KnownVector(t *testing.T) {
 	}
 }
 
-func TestLivekitIdentity_Basic(t *testing.T) {
-	result := LiveKitIdentity("@user:example.com", "DEVICE1", "session-uuid")
-	want := expected("@user:example.com|DEVICE1|session-uuid")
+func TestLivekitIdentity_Format(t *testing.T) {
+	// EC expects "userId:deviceId" format to match call.member state events.
+	result := LiveKitIdentity("@user:example.com", "DEVICE1")
+	want := "@user:example.com:DEVICE1"
 	if result != want {
 		t.Errorf("LiveKitIdentity() = %q, want %q", result, want)
 	}
 }
 
-func TestLivekitIdentity_DifferentSessionsDiffer(t *testing.T) {
-	a := LiveKitIdentity("@user:example.com", "DEV1", "session-a")
-	b := LiveKitIdentity("@user:example.com", "DEV1", "session-b")
-	if a == b {
-		t.Error("different sessions should differ")
-	}
-}
-
 func TestLivekitIdentity_DifferentDevicesDiffer(t *testing.T) {
-	a := LiveKitIdentity("@user:example.com", "DEV1", "session-a")
-	b := LiveKitIdentity("@user:example.com", "DEV2", "session-a")
+	a := LiveKitIdentity("@user:example.com", "DEV1")
+	b := LiveKitIdentity("@user:example.com", "DEV2")
 	if a == b {
 		t.Error("different devices should differ")
 	}
 }
 
-func TestLivekitIdentity_NoPadding(t *testing.T) {
-	result := LiveKitIdentity("@user:example.com", "DEVICE1", "session-uuid")
-	if strings.Contains(result, "=") {
-		t.Errorf("result should not contain padding, got %q", result)
-	}
-}
-
 func TestLivekitIdentity_BotGuestIdentity(t *testing.T) {
-	// Simulate the bot proxying a guest: bot userId + synthetic device + session UUID.
-	result := LiveKitIdentity(
-		"@call-bridge:kiefte.eu",
-		"GUEST_a3f9c1",
-		"550e8400-e29b-41d4-a716-446655440000",
-	)
-	want := expected("@call-bridge:kiefte.eu|GUEST_a3f9c1|550e8400-e29b-41d4-a716-446655440000")
+	// Simulate the bot proxying a guest: bot userId + synthetic device.
+	// EC matches this against call.member content {device_id: "GUEST_a3f9c1"}
+	// sent by @call-bridge:kiefte.eu.
+	result := LiveKitIdentity("@call-bridge:kiefte.eu", "GUEST_a3f9c1")
+	want := "@call-bridge:kiefte.eu:GUEST_a3f9c1"
 	if result != want {
 		t.Errorf("bot guest identity: got %q, want %q", result, want)
 	}

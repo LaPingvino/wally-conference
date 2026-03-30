@@ -136,7 +136,7 @@ func (svc *Service) moveToBreakout(sessionID, breakoutID string) (map[string]str
 	lkRoom := breakout.LKAlias
 
 	// Recompute identity (stays the same, only room changes)
-	lkIdent := LiveKitIdentity(session.BotUserID, session.DeviceID, session.ID)
+	lkIdent := LiveKitIdentity(session.BotUserID, session.DeviceID)
 
 	jwtToken, err := MakeGuestJWT(
 		svc.Config.LiveKitAPIKey,

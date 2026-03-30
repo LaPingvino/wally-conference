@@ -62,8 +62,8 @@ func TestRoomAlias(t *testing.T) {
 }
 
 func TestParticipantIdentity(t *testing.T) {
-    result := LiveKitIdentity("@user:example.com", "DEVICE1", "session-uuid")
-    expected := hashUnpaddedBase64("@user:example.com|DEVICE1|session-uuid")
+    result := LiveKitIdentity("@user:example.com", "DEVICE1")
+    expected := "@user:example.com:DEVICE1"
     assert(result == expected)
 }
 ```

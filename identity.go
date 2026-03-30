@@ -27,11 +27,13 @@ func LiveKitRoomAliasForMode(matrixRoomID, mode string) string {
 	return matrixRoomID // raw mode — pass through
 }
 
-// LiveKitIdentity derives a LiveKit participant identity from a membership triple.
+// LiveKitIdentity returns the LiveKit participant identity for a call member.
 //
-// Formula: base64_unpadded(SHA256(userId | deviceId | sessionId))
-func LiveKitIdentity(userID, deviceID, sessionID string) string {
-	return hashUnpaddedBase64(userID + "|" + deviceID + "|" + sessionID)
+// Element Call expects the LK identity to match the format it reads from
+// call.member state events: "userId:deviceId". If the identity doesn't match,
+// EC's MatrixAudioRenderer refuses to render the participant's tracks.
+func LiveKitIdentity(userID, deviceID string) string {
+	return userID + ":" + deviceID
 }
 
 // LiveKitBreakoutAlias derives a LiveKit room name for a breakout room.
