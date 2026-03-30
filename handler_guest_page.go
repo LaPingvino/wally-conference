@@ -13,11 +13,46 @@ const guestPageTemplate = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Join Call — Wally Conference</title>
+<script>
+(function() {
+  var t = localStorage.getItem('wally-theme') || 'dark';
+  if (t === 'auto') {
+    t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 <style>
+  /* ── Theme variables ── */
+  [data-theme="dark"] {
+    --bg: #1a1a2e; --card: #16213e; --input: #0f3460;
+    --accent: #e94560; --accent-hover: #c73e54;
+    --text: #eee; --text-muted: #888; --success: #4ec94e;
+    --border: #333; --toolbar: #16213e;
+    --tile: #16213e; --tile-no-video: #0f3460;
+    --tb-btn-bg: #2a2a4a; --tb-btn-hover: #3a3a5a;
+    --dbg-bg: rgba(0,0,0,.92); --dbg-text: #0f0;
+    --dbg-input-bg: #111; --dbg-btn-bg: #333; --dbg-btn-hover: #555;
+    --dbg-border: #222; --dbg-btn-border: #555;
+    --label-bg: rgba(0,0,0,.6);
+  }
+  [data-theme="light"] {
+    --bg: #f0f2f5; --card: #ffffff; --input: #f8f9fa;
+    --accent: #e94560; --accent-hover: #c73e54;
+    --text: #1a1a2e; --text-muted: #666; --success: #2d8a2d;
+    --border: #ddd; --toolbar: #ffffff;
+    --tile: #f0f2f5; --tile-no-video: #e8ecf0;
+    --tb-btn-bg: #e0e3e8; --tb-btn-hover: #cdd1d8;
+    --dbg-bg: rgba(255,255,255,.95); --dbg-text: #1a7a1a;
+    --dbg-input-bg: #f0f2f5; --dbg-btn-bg: #e0e3e8; --dbg-btn-hover: #cdd1d8;
+    --dbg-border: #ddd; --dbg-btn-border: #bbb;
+    --label-bg: rgba(255,255,255,.7);
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e; color: #eee;
+    background: var(--bg); color: var(--text);
     display: flex; align-items: center; justify-content: center;
     min-height: 100vh; padding: 1rem;
     overflow: hidden;
@@ -25,34 +60,52 @@ const guestPageTemplate = `<!DOCTYPE html>
 
   /* ── Join card ── */
   .card {
-    background: #16213e; border-radius: 12px; padding: 2rem;
+    position: relative;
+    background: var(--card); border-radius: 12px; padding: 2rem;
     max-width: 400px; width: 100%%; box-shadow: 0 4px 24px rgba(0,0,0,.4);
   }
-  h1 { font-size: 1.4rem; margin-bottom: .25rem; }
-  .subtitle { color: #888; font-size: .85rem; margin-bottom: 1.5rem; word-break: break-all; }
-  label { display: block; font-size: .9rem; margin-bottom: .4rem; color: #aaa; }
+  .wally-logo {
+    display: flex; align-items: center; gap: 10px; margin-bottom: .25rem;
+  }
+  .wally-logo svg { width: 36px; height: 36px; flex-shrink: 0; }
+  .wally-logo span { font-size: 1.4rem; font-weight: 700; }
+  .subtitle { color: var(--text-muted); font-size: .85rem; margin-bottom: 1.5rem; word-break: break-all; }
+  label { display: block; font-size: .9rem; margin-bottom: .4rem; color: var(--text-muted); }
   input {
     width: 100%%; padding: .65rem .8rem; border-radius: 8px;
-    border: 1px solid #333; background: #0f3460; color: #eee;
+    border: 1px solid var(--border); background: var(--input); color: var(--text);
     font-size: 1rem; margin-bottom: 1rem; outline: none;
   }
-  input:focus { border-color: #e94560; }
+  input:focus { border-color: var(--accent); }
   .join-btn {
     width: 100%%; padding: .7rem; border-radius: 8px; border: none;
-    background: #e94560; color: #fff; font-size: 1rem; font-weight: 600;
+    background: var(--accent); color: #fff; font-size: 1rem; font-weight: 600;
     cursor: pointer; transition: background .2s;
   }
-  .join-btn:hover { background: #c73e54; }
+  .join-btn:hover { background: var(--accent-hover); }
   .join-btn:disabled { background: #555; cursor: not-allowed; }
-  .error { color: #e94560; font-size: .85rem; margin-top: .5rem; }
-  .success { color: #4ec94e; font-size: .85rem; margin-top: .5rem; }
-  .branding { text-align: center; margin-top: 1.5rem; color: #555; font-size: .75rem; }
-  .branding a { color: #888; text-decoration: none; }
+  .error { color: var(--accent); font-size: .85rem; margin-top: .5rem; }
+  .success { color: var(--success); font-size: .85rem; margin-top: .5rem; }
+  .branding { text-align: center; margin-top: 1.5rem; color: var(--text-muted); font-size: .75rem; }
+  .branding a { color: var(--text-muted); text-decoration: none; }
+
+  /* ── Theme picker ── */
+  .theme-picker {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; gap: 4px;
+  }
+  .theme-picker button {
+    background: none; border: 1px solid var(--border);
+    color: var(--text-muted); border-radius: 6px;
+    width: 28px; height: 28px; cursor: pointer;
+    font-size: 14px; display: flex; align-items: center; justify-content: center;
+  }
+  .theme-picker button.active { color: var(--accent); border-color: var(--accent); }
 
   /* ── Call view ── */
   #callView {
     display: none; position: fixed; inset: 0;
-    background: #1a1a2e; flex-direction: column;
+    background: var(--bg); flex-direction: column;
   }
   #callView.active { display: flex; }
 
@@ -63,7 +116,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   }
 
   .tile {
-    position: relative; background: #16213e; border-radius: 8px;
+    position: relative; background: var(--tile); border-radius: 8px;
     overflow: hidden; display: flex; align-items: center; justify-content: center;
     min-height: 0;
   }
@@ -72,7 +125,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   }
   .tile .name-label {
     position: absolute; bottom: 6px; left: 6px;
-    background: rgba(0,0,0,.6); color: #eee; padding: 2px 8px;
+    background: var(--label-bg); color: var(--text); padding: 2px 8px;
     border-radius: 4px; font-size: .8rem; pointer-events: none;
     max-width: calc(100%% - 12px); overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
@@ -80,14 +133,14 @@ const guestPageTemplate = `<!DOCTYPE html>
   .tile .no-video {
     display: flex; align-items: center; justify-content: center;
     width: 100%%; height: 100%%; font-size: 2.5rem;
-    background: #0f3460; color: #aaa;
+    background: var(--tile-no-video); color: var(--text-muted);
   }
 
   /* Self-view PIP */
   #selfView {
     position: fixed; bottom: 80px; right: 12px;
     width: 160px; height: 120px; border-radius: 8px;
-    overflow: hidden; background: #16213e; z-index: 20;
+    overflow: hidden; background: var(--tile); z-index: 20;
     box-shadow: 0 2px 12px rgba(0,0,0,.5);
   }
   #selfView video {
@@ -97,49 +150,54 @@ const guestPageTemplate = `<!DOCTYPE html>
   #selfView .no-video {
     display: flex; align-items: center; justify-content: center;
     width: 100%%; height: 100%%; font-size: 1.5rem;
-    background: #0f3460; color: #aaa;
+    background: var(--tile-no-video); color: var(--text-muted);
   }
 
   /* Toolbar */
   #toolbar {
     display: flex; align-items: center; justify-content: center;
-    gap: 12px; padding: 12px; background: #16213e;
-    z-index: 10;
+    gap: 12px; padding: 12px; background: var(--toolbar);
+    z-index: 10; position: relative;
   }
   .tb-btn {
     width: 48px; height: 48px; border-radius: 50%%; border: none;
-    background: #2a2a4a; color: #eee; font-size: 1.2rem;
+    background: var(--tb-btn-bg); color: var(--text); font-size: 1.2rem;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     transition: background .2s;
   }
-  .tb-btn:hover { background: #3a3a5a; }
-  .tb-btn.active { background: #e94560; }
-  .tb-btn.hangup { background: #e94560; }
-  .tb-btn.hangup:hover { background: #c73e54; }
+  .tb-btn:hover { background: var(--tb-btn-hover); }
+  .tb-btn.active { background: var(--accent); color: #fff; }
+  .tb-btn.hangup { background: var(--accent); color: #fff; }
+  .tb-btn.hangup:hover { background: var(--accent-hover); }
   .tb-btn svg { width: 22px; height: 22px; fill: currentColor; }
+  .toolbar-watermark {
+    position: absolute; right: 16px; font-size: .7rem;
+    color: var(--text-muted); opacity: .35; pointer-events: none;
+    font-weight: 600; letter-spacing: .5px;
+  }
 
   /* Debug panel — toggle with Ctrl+D */
   #debugPanel {
     display: none; position: fixed; top: 0; right: 0; bottom: 0;
-    width: min(420px, 90vw); background: rgba(0,0,0,.92); color: #0f0;
+    width: min(420px, 90vw); background: var(--dbg-bg); color: var(--dbg-text);
     font-family: monospace; font-size: .75rem; padding: 12px;
-    overflow-y: auto; z-index: 100; border-left: 2px solid #333;
+    overflow-y: auto; z-index: 100; border-left: 2px solid var(--border);
   }
   #debugPanel.open { display: block; }
-  #debugPanel h3 { color: #e94560; font-size: .9rem; margin: 8px 0 4px; }
+  #debugPanel h3 { color: var(--accent); font-size: .9rem; margin: 8px 0 4px; }
   #debugPanel pre { white-space: pre-wrap; word-break: break-all; margin: 0 0 6px; }
-  #debugPanel .dbg-row { padding: 2px 0; border-bottom: 1px solid #222; }
-  #debugPanel .dbg-key { color: #888; }
-  #debugPanel .dbg-val { color: #4ec94e; }
-  #debugPanel .dbg-warn { color: #e94560; }
+  #debugPanel .dbg-row { padding: 2px 0; border-bottom: 1px solid var(--dbg-border); }
+  #debugPanel .dbg-key { color: var(--text-muted); }
+  #debugPanel .dbg-val { color: var(--success); }
+  #debugPanel .dbg-warn { color: var(--accent); }
   #debugPanel button {
-    background: #333; color: #eee; border: 1px solid #555;
+    background: var(--dbg-btn-bg); color: var(--text); border: 1px solid var(--dbg-btn-border);
     padding: 4px 10px; border-radius: 4px; cursor: pointer; margin: 2px;
     font-family: monospace; font-size: .75rem;
   }
-  #debugPanel button:hover { background: #555; }
+  #debugPanel button:hover { background: var(--dbg-btn-hover); }
   #debugPanel input {
-    background: #111; color: #0f0; border: 1px solid #333;
+    background: var(--dbg-input-bg); color: var(--dbg-text); border: 1px solid var(--border);
     padding: 4px 6px; font-family: monospace; font-size: .75rem;
     width: 100%%; margin: 4px 0;
   }
@@ -147,7 +205,7 @@ const guestPageTemplate = `<!DOCTYPE html>
   /* Connection status */
   #connStatus {
     text-align: center; padding: 8px; font-size: .85rem;
-    color: #888; background: #16213e; z-index: 5;
+    color: var(--text-muted); background: var(--toolbar); z-index: 5;
   }
   #connStatus.connected { display: none; }
 
@@ -161,7 +219,18 @@ const guestPageTemplate = `<!DOCTYPE html>
 
 <!-- Join card -->
 <div class="card" id="joinCard">
-  <h1>Join Call</h1>
+  <div class="theme-picker" id="themePicker">
+    <button data-theme="light" title="Light theme">&#9728;</button>
+    <button data-theme="dark" title="Dark theme">&#9790;</button>
+    <button data-theme="auto" title="Auto (system)">&#9680;</button>
+  </div>
+  <div class="wally-logo">
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="24" cy="24" r="23" stroke="currentColor" stroke-width="2" fill="var(--accent)"/>
+      <text x="24" y="32" text-anchor="middle" fill="#fff" font-size="26" font-weight="bold" font-family="-apple-system,BlinkMacSystemFont,sans-serif">W</text>
+    </svg>
+    <span>Wally Conference</span>
+  </div>
   <p class="subtitle">%s</p>
   <form id="joinForm">
     <label for="name">Your name</label>
@@ -169,7 +238,7 @@ const guestPageTemplate = `<!DOCTYPE html>
     <button type="submit" id="joinBtn" class="join-btn">Join Call</button>
     <div id="msg"></div>
   </form>
-  <div class="branding">Powered by <a href="https://github.com/LaPingvino/wally-conference">Wally Conference</a></div>
+  <div class="branding">Powered by <a href="https://github.com/LaPingvino/wally-conference">Wally Conference</a> &mdash; open-source guest calling for Matrix</div>
 </div>
 
 <!-- Call view -->
@@ -190,6 +259,7 @@ const guestPageTemplate = `<!DOCTYPE html>
     <button class="tb-btn hangup" id="btnHangup" title="Leave call">
       <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 010-1.36C3.46 8.83 7.49 7 12 7s8.54 1.83 11.71 4.72c.18.18.29.44.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 00-2.67-1.85.996.996 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
     </button>
+    <span class="toolbar-watermark">Wally</span>
   </div>
 </div>
 
@@ -218,6 +288,29 @@ const guestPageTemplate = `<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.18.0/dist/livekit-client.umd.js"></script>
 <script>
 (function() {
+  // ── Theme picker ──
+  function setTheme(choice) {
+    localStorage.setItem('wally-theme', choice);
+    var resolved = choice;
+    if (choice === 'auto') {
+      resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.querySelectorAll('.theme-picker button').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.theme === choice);
+    });
+  }
+  // Init picker state
+  var savedTheme = localStorage.getItem('wally-theme') || 'dark';
+  document.querySelectorAll('.theme-picker button').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.theme === savedTheme);
+    b.addEventListener('click', function() { setTheme(b.dataset.theme); });
+  });
+  // Listen for OS theme changes when in auto mode
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function() {
+    if (localStorage.getItem('wally-theme') === 'auto') setTheme('auto');
+  });
+
   const roomId = %q;
   const form = document.getElementById('joinForm');
   const nameInput = document.getElementById('name');
