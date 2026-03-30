@@ -124,12 +124,13 @@ func (svc *Service) cmdCleanup(ctx context.Context, evt *event.Event, roomID id.
 		if err := json.Unmarshal(raw, &content); err != nil || content.DeviceID == "" {
 			continue // already empty
 		}
-		session, _ := GetSessionByStateKey(svc.DB, stateKey)
-		if session != nil {
-			continue // has matching session, not orphaned
-		}
+		// Clear all bot call.member events — manual cleanup is unconditional
 		if err := ClearCallMember(ctx, svc.Client, roomID, stateKey); err == nil {
 			cleared++
+		}
+		// Also remove matching DB session if any
+		if session, _ := GetSessionByStateKey(svc.DB, stateKey); session != nil {
+			DeleteSession(svc.DB, session.ID)
 		}
 	}
 
