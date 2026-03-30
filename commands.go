@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -72,6 +73,8 @@ func (svc *Service) HandleMatrixMessage(ctx context.Context, evt *event.Event) {
 		svc.cmdKick(ctx, evt, roomID, sender, parts[2])
 	case "activate":
 		svc.cmdActivate(ctx, evt, roomID)
+	case "cleanup":
+		svc.cmdCleanup(ctx, evt, roomID, sender)
 	case "config":
 		svc.cmdConfig(ctx, evt, roomID, sender)
 	case "breakout":
@@ -88,6 +91,7 @@ const cmdHelp = `Wally Conference commands:
 - ` + "`!wc leave <room_id>`" + ` — bot leaves a room
 - ` + "`!wc kick <session_id>`" + ` — remove a guest
 - ` + "`!wc activate`" + ` — re-send welcome message and state event
+- ` + "`!wc cleanup`" + ` — clear orphaned call.member events and expired sessions
 - ` + "`!wc config`" + ` — show configuration
 - ` + "`!wc breakout create <topic>`" + ` — create breakout
 - ` + "`!wc breakout list`" + ` — list active breakouts
@@ -96,6 +100,52 @@ const cmdHelp = `Wally Conference commands:
 
 func (svc *Service) cmdActivate(ctx context.Context, evt *event.Event, roomID id.RoomID) {
 	svc.onRoomJoin(ctx, roomID)
+}
+
+func (svc *Service) cmdCleanup(ctx context.Context, evt *event.Event, roomID id.RoomID, sender id.UserID) {
+	botPrefix := fmt.Sprintf("_%s_", svc.BotUserID)
+	callMemberType := event.Type{Type: "org.matrix.msc3401.call.member", Class: event.StateEventType}
+
+	var cleared, expired int
+
+	// 1. Clear orphaned call.member state events (bot prefix, no matching DB session)
+	stateMap, err := svc.Client.State(ctx, roomID)
+	if err != nil {
+		svc.sendReply(ctx, evt, fmt.Sprintf("Error fetching room state: %v", err))
+		return
+	}
+
+	for stateKey, stateEvt := range stateMap[callMemberType] {
+		if !strings.HasPrefix(stateKey, botPrefix) {
+			continue
+		}
+		var content callMemberContent
+		raw, _ := json.Marshal(stateEvt.Content.Raw)
+		if err := json.Unmarshal(raw, &content); err != nil || content.DeviceID == "" {
+			continue // already empty
+		}
+		session, _ := GetSessionByStateKey(svc.DB, stateKey)
+		if session != nil {
+			continue // has matching session, not orphaned
+		}
+		if err := ClearCallMember(ctx, svc.Client, roomID, stateKey); err == nil {
+			cleared++
+		}
+	}
+
+	// 2. Remove expired DB sessions for this room
+	sessions, _ := GetAllSessionsInRoom(svc.DB, string(roomID))
+	now := time.Now().Unix()
+	for _, s := range sessions {
+		if s.ExpiresAt < now {
+			ClearCallMember(ctx, svc.Client, roomID, s.StateKey)
+			DeleteSession(svc.DB, s.ID)
+			expired++
+		}
+	}
+
+	msg := fmt.Sprintf("**Cleanup complete**\n- Orphaned call.member events cleared: %d\n- Expired sessions removed: %d", cleared, expired)
+	svc.sendReply(ctx, evt, msg)
 }
 
 func (svc *Service) cmdStatus(ctx context.Context, evt *event.Event, roomID id.RoomID) {
