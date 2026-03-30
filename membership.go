@@ -28,14 +28,16 @@ func SendCallMember(
 	lkServiceURL string,
 	lkAlias string,
 	expiresMS int,
+	displayName string,
 ) error {
 	content := map[string]interface{}{
-		"application": "m.call",
-		"call_id":     "",
-		"scope":       "m.room",
-		"device_id":   deviceID,
-		"expires":     expiresMS,
-		"created_ts":  time.Now().UnixMilli(),
+		"application":  "m.call",
+		"call_id":      "",
+		"scope":        "m.room",
+		"device_id":    deviceID,
+		"expires":      expiresMS,
+		"created_ts":   time.Now().UnixMilli(),
+		"display_name": displayName,
 		"focus_active": map[string]interface{}{
 			"type":            "livekit",
 			"focus_selection": "oldest_membership",

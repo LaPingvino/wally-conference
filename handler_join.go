@@ -171,6 +171,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		ctx, svc.Client, roomID, stateKey,
 		deviceID, sessionID,
 		svc.Config.LiveKitServiceURL, body.RoomID, expiresMS,
+		displayName,
 	); err != nil {
 		logf("join", "Failed to send call.member event: %v", err)
 		// Still return the JWT so the guest can connect to LiveKit
