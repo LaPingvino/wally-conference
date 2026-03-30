@@ -369,13 +369,20 @@ func (svc *Service) cmdBreakoutCreate(ctx context.Context, evt *event.Event, roo
 		return
 	}
 
+	// Publish breakout as a state event so clients can read it directly
+	svc.sendBreakoutStateEvent(ctx, roomID, breakoutID, map[string]interface{}{
+		"topic":      topic,
+		"lk_alias":   lkAlias,
+		"created_by": string(sender),
+		"active":     true,
+	})
+
 	svc.sendReply(ctx, evt, fmt.Sprintf(
 		"**Breakout room created**\n\n"+
 			"ID: `%s`\n"+
-			"Topic: %s\n"+
-			"LiveKit room: `%s...`\n\n"+
+			"Topic: %s\n\n"+
 			"Use `!wc breakout move <session_id> %s` to move guests.",
-		breakoutID, topic, lkAlias[:16], breakoutID,
+		breakoutID, topic, breakoutID,
 	))
 }
 
@@ -426,6 +433,12 @@ func (svc *Service) cmdBreakoutEnd(ctx context.Context, evt *event.Event, roomID
 	}
 
 	EndBreakoutDB(svc.DB, breakoutID)
+
+	// Clear the state event
+	svc.sendBreakoutStateEvent(ctx, roomID, breakoutID, map[string]interface{}{
+		"active": false,
+	})
+
 	svc.sendReply(ctx, evt, fmt.Sprintf("Breakout `%s` ended. Cleaned up %d guest session(s).", breakoutID, len(sessions)))
 }
 
@@ -445,6 +458,15 @@ func (svc *Service) cmdBreakoutMove(ctx context.Context, evt *event.Event, roomI
 		"Moved session `%s` to breakout `%s`.\nNew EC URL: %s",
 		sessionID, breakoutID, result["ec_url"],
 	))
+}
+
+var breakoutEventType = event.Type{Type: "eu.kiefte.wally.breakout", Class: event.StateEventType}
+
+func (svc *Service) sendBreakoutStateEvent(ctx context.Context, roomID id.RoomID, breakoutID string, content map[string]interface{}) {
+	_, err := svc.Client.SendStateEvent(ctx, roomID, breakoutEventType, breakoutID, content)
+	if err != nil {
+		log.Printf("Failed to send breakout state event %s in %s: %v", breakoutID, roomID, err)
+	}
 }
 
 // ── Helpers ──────────────────────────────────────────────

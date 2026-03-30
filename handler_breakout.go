@@ -79,6 +79,15 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Publish as state event
+	ctx := context.Background()
+	svc.sendBreakoutStateEvent(ctx, id.RoomID(body.RoomID), breakoutID, map[string]interface{}{
+		"topic":      topic,
+		"lk_alias":   lkAlias,
+		"created_by": createdBy,
+		"active":     true,
+	})
+
 	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"breakout_id":  breakoutID,
@@ -348,6 +357,11 @@ func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	EndBreakoutDB(svc.DB, body.BreakoutID)
+
+	// Clear state event
+	svc.sendBreakoutStateEvent(ctx, id.RoomID(breakout.MatrixRoomID), body.BreakoutID, map[string]interface{}{
+		"active": false,
+	})
 
 	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]string{
