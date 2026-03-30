@@ -111,9 +111,37 @@ func ValidateDisplayName(name string) (string, string) {
 	return sanitized, ""
 }
 
+// matchOrigin checks if the request Origin is allowed and returns it,
+// or returns the allowedOrigins string if it's "*" or a single match.
+func matchOrigin(r *http.Request, allowedOrigins string) string {
+	if allowedOrigins == "*" {
+		return "*"
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return allowedOrigins
+	}
+	for _, allowed := range strings.Split(allowedOrigins, ",") {
+		if strings.TrimSpace(allowed) == origin {
+			return origin
+		}
+	}
+	// Default to first origin if no match (backwards compat)
+	return strings.TrimSpace(strings.Split(allowedOrigins, ",")[0])
+}
+
 // AddCORSHeaders adds CORS headers to a response.
+// Kept for backwards compat — callers without *http.Request.
 func AddCORSHeaders(w http.ResponseWriter, allowedOrigins string) {
 	w.Header().Set("Access-Control-Allow-Origin", allowedOrigins)
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+// SetCORS adds CORS headers, dynamically matching the request Origin
+// against a comma-separated allowedOrigins list (or "*").
+func SetCORS(w http.ResponseWriter, r *http.Request, allowedOrigins string) {
+	w.Header().Set("Access-Control-Allow-Origin", matchOrigin(r, allowedOrigins))
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }

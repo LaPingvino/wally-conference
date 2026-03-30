@@ -24,20 +24,20 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 		UserID string `json:"user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
 
 	if errMsg := ValidateRoomID(body.RoomID); errMsg != "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
 		return
 	}
 
 	topic := body.Topic
 	if topic == "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "topic is required"})
 		return
 	}
@@ -46,12 +46,12 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 	active, err := CountActiveBreakouts(svc.DB, body.RoomID)
 	if err != nil {
 		log.Printf("Error counting breakouts: %v", err)
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
 	}
 	if active >= svc.Config.MaxBreakoutsPerRoom {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Breakout capacity reached"})
 		return
 	}
@@ -74,12 +74,12 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 	}
 	if err := CreateBreakoutRoom(svc.DB, br); err != nil {
 		log.Printf("Failed to create breakout: %v", err)
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
 	}
 
-	AddCORSHeaders(w, allowedOrigins)
+	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"breakout_id":  breakoutID,
 		"livekit_room": lkAlias,
@@ -96,25 +96,25 @@ func (svc *Service) HandleBreakoutMove(w http.ResponseWriter, r *http.Request) {
 		BreakoutID string `json:"breakout_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
 
 	if body.SessionID == "" || body.BreakoutID == "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id and breakout_id are required"})
 		return
 	}
 
 	result, err := svc.moveToBreakout(body.SessionID, body.BreakoutID)
 	if err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	AddCORSHeaders(w, allowedOrigins)
+	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -190,7 +190,7 @@ func (svc *Service) HandleBreakoutList(w http.ResponseWriter, r *http.Request) {
 
 	rawRoomID := r.PathValue("roomID")
 	if rawRoomID == "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing room ID"})
 		return
 	}
@@ -201,7 +201,7 @@ func (svc *Service) HandleBreakoutList(w http.ResponseWriter, r *http.Request) {
 
 	breakouts, err := GetActiveBreakouts(svc.DB, roomID)
 	if err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
 	}
@@ -226,7 +226,7 @@ func (svc *Service) HandleBreakoutList(w http.ResponseWriter, r *http.Request) {
 		result = []map[string]interface{}{}
 	}
 
-	AddCORSHeaders(w, allowedOrigins)
+	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"room_id":   roomID,
 		"breakouts": result,
@@ -242,25 +242,25 @@ func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
 		UserID     string `json:"user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
 
 	if body.BreakoutID == "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "breakout_id is required"})
 		return
 	}
 
 	breakout, err := GetBreakout(svc.DB, body.BreakoutID)
 	if err != nil || breakout == nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Breakout not found"})
 		return
 	}
 	if breakout.EndedAt.Valid {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Breakout already ended"})
 		return
 	}
@@ -275,7 +275,7 @@ func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
 
 	EndBreakoutDB(svc.DB, body.BreakoutID)
 
-	AddCORSHeaders(w, allowedOrigins)
+	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":      "ended",
 		"breakout_id": body.BreakoutID,

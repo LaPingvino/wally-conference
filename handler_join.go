@@ -24,7 +24,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		remoteIP = forwarded
 	}
 	if !svc.Limiter.Check(remoteIP) {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Rate limited"})
 		return
 	}
@@ -36,14 +36,14 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		BreakoutID  string `json:"breakout_id,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
 		return
 	}
 
 	// Validate room_id
 	if errMsg := ValidateRoomID(body.RoomID); errMsg != "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
 		return
 	}
@@ -51,7 +51,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	// Validate display_name
 	displayName, errMsg := ValidateDisplayName(body.DisplayName)
 	if errMsg != "" {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
 		return
 	}
@@ -61,12 +61,12 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	members, err := svc.Client.JoinedMembers(ctx, roomID)
 	if err != nil {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Bot not in room"})
 		return
 	}
 	if _, ok := members.Joined[id.UserID(svc.BotUserID)]; !ok {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Bot not in room"})
 		return
 	}
@@ -75,12 +75,12 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	activeCount, err := CountActiveSessions(svc.DB, body.RoomID)
 	if err != nil {
 		logf("join", "Error counting sessions: %v", err)
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
 	}
 	if activeCount >= svc.Config.MaxGuestsPerRoom {
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Guest capacity reached"})
 		return
 	}
@@ -105,12 +105,12 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		// Guest is joining a breakout room — use breakout's LK alias
 		breakout, brErr := GetBreakout(svc.DB, body.BreakoutID)
 		if brErr != nil || breakout == nil {
-			AddCORSHeaders(w, allowedOrigins)
+			SetCORS(w, r, allowedOrigins)
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Breakout not found"})
 			return
 		}
 		if breakout.EndedAt.Valid {
-			AddCORSHeaders(w, allowedOrigins)
+			SetCORS(w, r, allowedOrigins)
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Breakout has ended"})
 			return
 		}
@@ -123,7 +123,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		)
 		if jwtErr != nil {
 			logf("join", "Failed to create breakout JWT: %v", jwtErr)
-			AddCORSHeaders(w, allowedOrigins)
+			SetCORS(w, r, allowedOrigins)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
 			return
 		}
@@ -136,7 +136,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			logf("join", "Failed to get guest token: %v", err)
-			AddCORSHeaders(w, allowedOrigins)
+			SetCORS(w, r, allowedOrigins)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create JWT"})
 			return
 		}
@@ -161,7 +161,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := CreateSession(svc.DB, session); err != nil {
 		logf("join", "Failed to create session: %v", err)
-		AddCORSHeaders(w, allowedOrigins)
+		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal error"})
 		return
 	}
@@ -196,7 +196,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	ecURL := fmt.Sprintf("%s?%s", svc.Config.ECBaseURL, ecParams.Encode())
 
-	AddCORSHeaders(w, allowedOrigins)
+	SetCORS(w, r, allowedOrigins)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"jwt":          jwtToken,
 		"livekit_url":  livekitURL,
@@ -224,7 +224,12 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 
 // HandleCORSPreflight handles OPTIONS requests for CORS preflight.
 func (svc *Service) HandleCORSPreflight(w http.ResponseWriter, r *http.Request) {
-	CORSPreflight(w, svc.Config.AllowedOrigins)
+	origin := matchOrigin(r, svc.Config.AllowedOrigins)
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Max-Age", "86400")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // writeJSON writes a JSON response with the given status code.
