@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
+	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 )
 
@@ -12,6 +16,10 @@ import (
 func CleanupLoop(ctx context.Context, svc *Service) {
 	interval := time.Duration(svc.Config.CleanupInterval) * time.Second
 	logf("cleanup", "Cleanup task started (interval=%s)", interval)
+
+	// On startup, clear any orphaned call.member state events from previous runs.
+	// This handles the case where the bot crashed without cleaning up.
+	startupCleanup(ctx, svc)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -24,6 +32,66 @@ func CleanupLoop(ctx context.Context, svc *Service) {
 		case <-ticker.C:
 			runCleanup(ctx, svc)
 		}
+	}
+}
+
+// startupCleanup clears stale call.member state events left by previous bot runs.
+// It checks all joined rooms for call.member events sent by the bot that have no
+// matching active guest session in the DB.
+func startupCleanup(ctx context.Context, svc *Service) {
+	logf("cleanup", "Running startup cleanup for orphaned call.member events")
+
+	// Get all rooms the bot is in
+	resp, err := svc.Client.JoinedRooms(ctx)
+	if err != nil {
+		logf("cleanup", "Failed to get joined rooms for startup cleanup: %v", err)
+		return
+	}
+
+	callMemberType := event.Type{Type: "org.matrix.msc3401.call.member", Class: event.StateEventType}
+	botPrefix := fmt.Sprintf("_%s_", svc.BotUserID)
+	cleaned := 0
+
+	for _, roomID := range resp.JoinedRooms {
+		stateMap, err := svc.Client.State(ctx, roomID)
+		if err != nil {
+			continue
+		}
+
+		memberEvents := stateMap[callMemberType]
+		for stateKey, evt := range memberEvents {
+			// Only check state keys that belong to our bot (guest proxied events)
+			if !strings.HasPrefix(stateKey, botPrefix) {
+				continue
+			}
+
+			// Check if the content is non-empty (empty = already departed)
+			var content callMemberContent
+			raw, _ := json.Marshal(evt.Content.Raw)
+			if err := json.Unmarshal(raw, &content); err != nil || content.DeviceID == "" {
+				continue // already cleared or unparseable
+			}
+
+			// Check if there's a matching active session in the DB
+			session, _ := GetSessionByStateKey(svc.DB, stateKey)
+			if session != nil {
+				continue // session exists, leave it alone
+			}
+
+			// Orphaned: clear it
+			logf("cleanup", "Clearing orphaned call.member in %s (state_key=%s)", roomID, stateKey)
+			if err := ClearCallMember(ctx, svc.Client, roomID, stateKey); err != nil {
+				logf("cleanup", "Failed to clear orphaned call.member: %v", err)
+			} else {
+				cleaned++
+			}
+		}
+	}
+
+	if cleaned > 0 {
+		logf("cleanup", "Startup cleanup complete: cleared %d orphaned call.member event(s)", cleaned)
+	} else {
+		logf("cleanup", "Startup cleanup complete: no orphans found")
 	}
 }
 

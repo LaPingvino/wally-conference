@@ -17,6 +17,11 @@ import (
 
 // HandleMatrixMessage processes incoming Matrix messages and dispatches !wc commands.
 func (svc *Service) HandleMatrixMessage(ctx context.Context, evt *event.Event) {
+	// Ignore our own messages
+	if evt.Sender == id.UserID(svc.BotUserID) {
+		return
+	}
+
 	content := evt.Content.AsMessage()
 	if content == nil || content.Body == "" {
 		return
@@ -26,6 +31,32 @@ func (svc *Service) HandleMatrixMessage(ctx context.Context, evt *event.Event) {
 	if !strings.HasPrefix(body, "!wc") {
 		return
 	}
+
+	// Deduplicate: skip if we already replied to this event.
+	// In-memory set handles the common case (same run). For restart replays,
+	// check if the bot already sent a message in this room after the command.
+	evtID := evt.ID.String()
+	svc.repliedMu.Lock()
+	if svc.repliedEvents[evtID] {
+		svc.repliedMu.Unlock()
+		return
+	}
+	svc.repliedMu.Unlock()
+
+	// For events from before startup, check timeline for an existing bot reply
+	if evt.Timestamp < svc.StartedAt.UnixMilli() {
+		if svc.botAlreadyReplied(ctx, evt) {
+			svc.repliedMu.Lock()
+			svc.repliedEvents[evtID] = true
+			svc.repliedMu.Unlock()
+			return
+		}
+	}
+
+	// Mark as replied before executing (prevents races with concurrent syncs)
+	svc.repliedMu.Lock()
+	svc.repliedEvents[evtID] = true
+	svc.repliedMu.Unlock()
 
 	parts := strings.Fields(body)
 	if len(parts) < 2 {
@@ -407,6 +438,25 @@ func (svc *Service) isModerator(ctx context.Context, roomID id.RoomID, userID id
 		return false
 	}
 	return pl.GetUserLevel(userID) >= 50
+}
+
+// botAlreadyReplied checks the room timeline after an event to see if the bot
+// already sent a message in response. Looks at the next few messages after the
+// command event timestamp — if any are from the bot, assume already handled.
+func (svc *Service) botAlreadyReplied(ctx context.Context, evt *event.Event) bool {
+	// Fetch recent messages from the room
+	msgs, err := svc.Client.Messages(ctx, evt.RoomID, "", "", 'f', nil, 10)
+	if err != nil {
+		return false // can't check, allow the command through
+	}
+	botID := id.UserID(svc.BotUserID)
+	for _, msg := range msgs.Chunk {
+		// Look for bot messages sent after the command
+		if msg.Sender == botID && msg.Timestamp > evt.Timestamp {
+			return true
+		}
+	}
+	return false
 }
 
 func (svc *Service) sendReply(ctx context.Context, evt *event.Event, body string) {

@@ -104,6 +104,19 @@ func GetSessionByIdentity(db *sql.DB, lkIdentity string) (*GuestSession, error) 
 	return s, err
 }
 
+// GetSessionByStateKey looks up a guest session by its call.member state key.
+func GetSessionByStateKey(db *sql.DB, stateKey string) (*GuestSession, error) {
+	s := &GuestSession{}
+	err := db.QueryRow(
+		"SELECT id, room_id, bot_user_id, device_id, display_name, lk_identity, lk_room, breakout_id, created_at, expires_at, state_key FROM guest_session WHERE state_key = ?",
+		stateKey,
+	).Scan(&s.ID, &s.RoomID, &s.BotUserID, &s.DeviceID, &s.DisplayName, &s.LKIdentity, &s.LKRoom, &s.BreakoutID, &s.CreatedAt, &s.ExpiresAt, &s.StateKey)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return s, err
+}
+
 // GetSession looks up a guest session by its primary key.
 func GetSession(db *sql.DB, sessionID string) (*GuestSession, error) {
 	s := &GuestSession{}
