@@ -76,7 +76,7 @@ func (svc *Service) HandleMatrixMessage(ctx context.Context, evt *event.Event) {
 	case "cleanup":
 		svc.cmdCleanup(ctx, evt, roomID, sender)
 	case "deepclean":
-		svc.cmdDeepClean(ctx, evt, roomID, sender)
+		svc.cmdDeepClean(ctx, evt, roomID, sender, len(parts) >= 3 && parts[2] == "all")
 	case "config":
 		svc.cmdConfig(ctx, evt, roomID, sender)
 	case "breakout":
@@ -463,7 +463,7 @@ func (svc *Service) cmdBreakoutMove(ctx context.Context, evt *event.Event, roomI
 	))
 }
 
-func (svc *Service) cmdDeepClean(ctx context.Context, evt *event.Event, roomID id.RoomID, sender id.UserID) {
+func (svc *Service) cmdDeepClean(ctx context.Context, evt *event.Event, roomID id.RoomID, sender id.UserID, all bool) {
 	if !svc.isModerator(ctx, roomID, sender) {
 		svc.sendReply(ctx, evt, "Permission denied: moderator power level required.")
 		return
@@ -480,20 +480,22 @@ func (svc *Service) cmdDeepClean(ctx context.Context, evt *event.Event, roomID i
 
 	var cleared int
 	for stateKey := range stateMap[callMemberType] {
-		if !strings.HasPrefix(stateKey, botPrefix) {
+		if !all && !strings.HasPrefix(stateKey, botPrefix) {
 			continue
 		}
-		// Clear regardless of content (empty or not)
 		if err := ClearCallMember(ctx, svc.Client, roomID, stateKey); err == nil {
 			cleared++
 		}
-		// Also remove DB session if any
 		if session, _ := GetSessionByStateKey(svc.DB, stateKey); session != nil {
 			DeleteSession(svc.DB, session.ID)
 		}
 	}
 
-	svc.sendReply(ctx, evt, fmt.Sprintf("**Deep clean complete**\nCleared %d bot call.member state event(s).", cleared))
+	scope := "bot"
+	if all {
+		scope = "ALL"
+	}
+	svc.sendReply(ctx, evt, fmt.Sprintf("**Deep clean complete**\nCleared %d %s call.member state event(s).", cleared, scope))
 }
 
 var breakoutEventType = event.Type{Type: "eu.kiefte.wally.breakout", Class: event.StateEventType}
