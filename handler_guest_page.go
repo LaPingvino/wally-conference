@@ -360,7 +360,33 @@ const guestPageTemplate = `<!DOCTYPE html>
   // ── Helpers ──
 
   function avatarInitial(name) {
-    return (name || '?').charAt(0).toUpperCase();
+    return (name || '?').replace(/[^a-zA-Z0-9]/, '').charAt(0).toUpperCase() || '?';
+  }
+
+  function resolveName(participant) {
+    if (participant.name) return participant.name;
+    var identity = participant.identity || '';
+    var lastColon = identity.lastIndexOf(':');
+    if (lastColon > 0) {
+      var userId = identity.substring(0, lastColon);
+      if (userId.charAt(0) === '@') return userId.slice(1).split(':')[0];
+      return userId;
+    }
+    return identity || 'Unknown';
+  }
+
+  var micMutedSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="opacity:.5"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>';
+  var micOnSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3zm-1 4.93A7.004 7.004 0 015 12h2a5 5 0 0010 0h2a7.004 7.004 0 01-6 6.93V22h-2v-3.07z"/></svg>';
+
+  function updateTileMicState(participant) {
+    var id = participant.sid || participant.identity;
+    var tile = videoGrid.querySelector('[data-participant="' + id + '"]');
+    if (!tile) return;
+    var micEl = tile.querySelector('.mic-indicator');
+    if (!micEl) return;
+    var micPub = participant.getTrackPublication(LK.Track.Source.Microphone);
+    var muted = !micPub || !micPub.track || micPub.isMuted;
+    micEl.innerHTML = muted ? micMutedSvg : micOnSvg;
   }
 
   function updateGridLayout() {
@@ -380,16 +406,32 @@ const guestPageTemplate = `<!DOCTYPE html>
       tile.className = 'tile';
       tile.dataset.participant = id;
 
+      var name = resolveName(participant);
+
       const noVid = document.createElement('div');
       noVid.className = 'no-video';
-      noVid.textContent = avatarInitial(participant.name || participant.identity);
+      noVid.textContent = avatarInitial(name);
       tile.appendChild(noVid);
 
       const label = document.createElement('div');
       label.className = 'name-label';
-      label.textContent = participant.name || participant.identity || 'Guest';
-      tile.appendChild(label);
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.gap = '4px';
 
+      var mic = document.createElement('span');
+      mic.className = 'mic-indicator';
+      mic.innerHTML = micMutedSvg;
+      label.appendChild(mic);
+
+      var nameSpan = document.createElement('span');
+      nameSpan.style.overflow = 'hidden';
+      nameSpan.style.textOverflow = 'ellipsis';
+      nameSpan.style.whiteSpace = 'nowrap';
+      nameSpan.textContent = name;
+      label.appendChild(nameSpan);
+
+      tile.appendChild(label);
       videoGrid.appendChild(tile);
       updateGridLayout();
     }
@@ -558,6 +600,7 @@ const guestPageTemplate = `<!DOCTYPE html>
     room.on(LK.RoomEvent.ParticipantConnected, function(participant) {
       dbgLog('ParticipantConnected: ' + participant.identity + ' (' + (participant.name||'?') + ')');
       ensureTile(participant);
+      updateTileMicState(participant);
     });
 
     room.on(LK.RoomEvent.ParticipantDisconnected, function(participant) {
@@ -577,12 +620,14 @@ const guestPageTemplate = `<!DOCTYPE html>
       if (participant === room.localParticipant) {
         updateSelfView();
       }
+      updateTileMicState(participant);
     });
 
     room.on(LK.RoomEvent.TrackUnmuted, function(publication, participant) {
       if (participant === room.localParticipant) {
         updateSelfView();
       }
+      updateTileMicState(participant);
     });
 
     room.on(LK.RoomEvent.Disconnected, function() {
