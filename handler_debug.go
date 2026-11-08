@@ -41,7 +41,7 @@ func (svc *Service) HandleDebug(w http.ResponseWriter, r *http.Request) {
 		"active_alias":    activeAlias,
 		"alias_hash_mode": aliasHash,
 		"alias_raw_mode":  aliasRaw,
-		"alias_input":     roomID + "|m.call#ROOM",
+		"alias_input":     marshalStrings(roomID, "m.call#ROOM"),
 		"livekit_url":     svc.Config.LiveKitURL,
 		"lk_service_url":  svc.Config.LiveKitServiceURL,
 	}

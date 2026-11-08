@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"strings"
 )
 
 // hashUnpaddedBase64 computes SHA-256 of data and returns unpadded standard base64.
@@ -11,10 +14,29 @@ func hashUnpaddedBase64(data string) string {
 	return base64.RawStdEncoding.EncodeToString(h[:])
 }
 
-// LiveKitRoomAlias derives the LiveKit room name from a Matrix room ID
-// using the MSC4195 hash formula: base64_unpadded(SHA256(roomId | "m.call#ROOM")).
+// marshalStrings JSON-encodes a string list the way lk-jwt-service does (serde_json: no HTML
+// escaping) — the input of every MSC4195 hash.
+func marshalStrings(ss ...string) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(ss) // a []string always encodes
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// LiveKitRoomAliasForSlot is MSC4195's room alias, as lk-jwt-service (v0.4.1+) computes it:
+// base64_unpadded(SHA256(JSON([roomId, slotId]))).
+func LiveKitRoomAliasForSlot(matrixRoomID, slotID string) string {
+	return hashUnpaddedBase64(marshalStrings(matrixRoomID, slotID))
+}
+
+// LiveKitRoomAlias is the LiveKit room of a room's main call (slot "m.call#ROOM").
+//
+// Audit 2026-11-08: this was SHA256(roomId + "|m.call#ROOM"), an earlier MSC4195 draft. The
+// lk-jwt-service here (0.9.0) hashes JSON([roomId, slot]), so guests whose token the bot signed
+// itself sat alone in a LiveKit room no member was in.
 func LiveKitRoomAlias(matrixRoomID string) string {
-	return hashUnpaddedBase64(matrixRoomID + "|m.call#ROOM")
+	return LiveKitRoomAliasForSlot(matrixRoomID, "m.call#ROOM")
 }
 
 // LiveKitRoomAliasForMode returns the LiveKit room name based on the alias mode.

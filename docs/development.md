@@ -57,7 +57,7 @@ These must match lk-jwt-service's output exactly:
 // From lk-jwt-service test code
 func TestRoomAlias(t *testing.T) {
     result := LiveKitRoomAlias("!testRoom:example.com")
-    expected := hashUnpaddedBase64("!testRoom:example.com|m.call#ROOM")
+    expected := hashUnpaddedBase64(`["!testRoom:example.com","m.call#ROOM"]`)
     assert(result == expected)
 }
 

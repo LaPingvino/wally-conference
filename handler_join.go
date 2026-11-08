@@ -225,7 +225,7 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 			"device_id":           deviceID,
 			"state_key":           stateKey,
 			"lk_service_url":      svc.Config.LiveKitServiceURL,
-			"alias_input":         body.RoomID + "|m.call#ROOM",
+			"alias_input":         marshalStrings(body.RoomID, "m.call#ROOM"),
 			"focus_source":        tokenMeta.FocusSource,
 			"alias_mode":          svc.Config.LiveKitRoomAliasMode,
 			"alias_hash":          LiveKitRoomAlias(body.RoomID),

@@ -75,7 +75,7 @@ func LoadConfig(path string) (*Config, error) {
 		GuestTokenTTL:      7200,
 		MaxGuestsPerRoom:   20,
 		RequireActiveCall:  true,
-		LiveKitRoomAliasMode: "raw",
+		LiveKitRoomAliasMode: "hash", // lk-jwt-service ≥ 0.4.1 hashes; "raw" only for older ones
 		AllowedOrigins:     "*",
 		RateLimitPerMinute: 5,
 		AutoJoinInvites:    true,

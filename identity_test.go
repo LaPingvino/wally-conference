@@ -17,7 +17,7 @@ func expected(raw string) string {
 func TestLivekitRoomAlias_Basic(t *testing.T) {
 	roomID := "!testRoom:example.com"
 	result := LiveKitRoomAlias(roomID)
-	want := expected("!testRoom:example.com|m.call#ROOM")
+	want := expected(`["!testRoom:example.com","m.call#ROOM"]`) // JSON, as lk-jwt-service hashes it
 	if result != want {
 		t.Errorf("LiveKitRoomAlias(%q) = %q, want %q", roomID, result, want)
 	}
@@ -47,8 +47,8 @@ func TestLivekitRoomAlias_Deterministic(t *testing.T) {
 }
 
 func TestLivekitRoomAlias_KnownVector(t *testing.T) {
-	// Cross-check: SHA256 of "!testRoom:example.com|m.call#ROOM" as unpadded base64.
-	raw := "!testRoom:example.com|m.call#ROOM"
+	// Cross-check: SHA256 of JSON(["!testRoom:example.com","m.call#ROOM"]) as unpadded base64.
+	raw := `["!testRoom:example.com","m.call#ROOM"]`
 	h := sha256.Sum256([]byte(raw))
 	wantHex := hex.EncodeToString(h[:])
 
@@ -122,5 +122,12 @@ func TestLivekitBreakoutAlias_NoPadding(t *testing.T) {
 	result := LiveKitBreakoutAlias("!room:example.com", "test")
 	if strings.Contains(result, "=") {
 		t.Errorf("result should not contain padding, got %q", result)
+	}
+}
+
+// MSC4195 appendix test vector, as lk-jwt-service checks it (src/helper.rs).
+func TestLiveKitRoomAliasMSC4195Vector(t *testing.T) {
+	if got := LiveKitRoomAliasForSlot("!roomid:example.com", "slot1234"); got != "O8437W3+jmzMVjoIP3tNwbm+XxHQk2iKpOA7aqw3qSc" {
+		t.Fatalf("alias %q does not match the MSC4195 test vector", got)
 	}
 }
