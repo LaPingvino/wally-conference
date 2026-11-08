@@ -38,6 +38,10 @@ type Config struct {
 	// or "hash" (SHA256 hash per MSC4195, newer lk-jwt-service)
 	LiveKitRoomAliasMode string `yaml:"livekit_room_alias_mode"`
 
+	// DebugToken unlocks /guest/debug/*: requests need "Authorization: Bearer <token>". Empty
+	// (the default) turns the debug endpoints off — they show who is in which call.
+	DebugToken string `yaml:"debug_token"`
+
 	// Guest settings
 	GuestTokenTTL     int `yaml:"guest_token_ttl"`      // seconds
 	MaxGuestsPerRoom  int `yaml:"max_guests_per_room"`

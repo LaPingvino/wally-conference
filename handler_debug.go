@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -370,4 +371,21 @@ func (svc *Service) HandleJoinTrace(w http.ResponseWriter, r *http.Request) {
 // LiveKitRoomAlias2 computes alias with a custom slot suffix (for debug comparison).
 func LiveKitRoomAlias2(matrixRoomID, slot string) string {
 	return hashUnpaddedBase64(matrixRoomID + "|" + slot)
+}
+
+// requireDebugToken lets a debug request through only with the configured bearer token.
+//
+// Audit 2026-11-08: /guest/debug/{roomID} answered anyone — for a room the bot is in that is
+// its call members, their devices and focus details. Behind Caddy every request comes from
+// localhost, so the address can't tell Joop from the internet; a token can.
+func (svc *Service) requireDebugToken(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		want := svc.Config.DebugToken
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if want == "" || subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			http.NotFound(w, r)
+			return
+		}
+		next(w, r)
+	}
 }

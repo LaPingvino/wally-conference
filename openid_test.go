@@ -60,3 +60,28 @@ func TestVerifyOpenIDRejectsBadToken(t *testing.T) {
 		t.Fatal("rejected token accepted")
 	}
 }
+
+func TestDebugEndpointsNeedTheToken(t *testing.T) {
+	ok := func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) }
+	for _, c := range []struct {
+		token, header string
+		want          int
+	}{
+		{"", "", http.StatusNotFound},              // no token configured: off
+		{"", "Bearer ", http.StatusNotFound},       // empty never matches
+		{"s3cret", "", http.StatusNotFound},        // anonymous
+		{"s3cret", "Bearer nope", http.StatusNotFound},
+		{"s3cret", "Bearer s3cret", http.StatusTeapot},
+	} {
+		svc := &Service{Config: &Config{DebugToken: c.token}}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/guest/debug/x", nil)
+		if c.header != "" {
+			req.Header.Set("Authorization", c.header)
+		}
+		svc.requireDebugToken(ok)(rec, req)
+		if rec.Code != c.want {
+			t.Errorf("token %q header %q: got %d, want %d", c.token, c.header, rec.Code, c.want)
+		}
+	}
+}
