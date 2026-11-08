@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
 	"github.com/google/uuid"
@@ -68,6 +69,17 @@ func (svc *Service) HandleJoin(w http.ResponseWriter, r *http.Request) {
 	if _, ok := members.Joined[id.UserID(svc.BotUserID)]; !ok {
 		SetCORS(w, r, allowedOrigins)
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Bot not in room"})
+		return
+	}
+
+	// Check if room is encrypted — guests can't participate in E2EE calls
+	// because key exchange requires Matrix to-device messages.
+	var encContent struct{}
+	if err := svc.Client.StateEvent(ctx, roomID, event.StateEncryption, "", &encContent); err == nil {
+		SetCORS(w, r, allowedOrigins)
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "This room uses end-to-end encryption. Guest access to encrypted calls is not yet supported.",
+		})
 		return
 	}
 
