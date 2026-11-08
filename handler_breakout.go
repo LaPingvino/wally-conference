@@ -19,9 +19,9 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 	allowedOrigins := svc.Config.AllowedOrigins
 
 	var body struct {
-		RoomID string `json:"room_id"`
-		Topic  string `json:"topic"`
-		UserID string `json:"user_id"`
+		RoomID      string      `json:"room_id"`
+		Topic       string      `json:"topic"`
+		OpenIDToken OpenIDToken `json:"openid_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		SetCORS(w, r, allowedOrigins)
@@ -42,6 +42,14 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Who is asking, and are they in the room? (Audit 2026-11-08: this took a bare user_id, so
+	// anyone who could reach the endpoint created breakouts in any room the bot is in.)
+	ctx := r.Context()
+	userID, ok := svc.authorizeMember(ctx, w, r, body.OpenIDToken, id.RoomID(body.RoomID))
+	if !ok {
+		return
+	}
+
 	// Check breakout capacity
 	active, err := CountActiveBreakouts(svc.DB, body.RoomID)
 	if err != nil {
@@ -59,10 +67,7 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 	breakoutID := uuid.New().String()[:8]
 	lkAlias := LiveKitBreakoutAlias(body.RoomID, breakoutID)
 
-	createdBy := body.UserID
-	if createdBy == "" {
-		createdBy = "http-api"
-	}
+	createdBy := userID.String()
 
 	br := &BreakoutRoom{
 		ID:           breakoutID,
@@ -80,8 +85,7 @@ func (svc *Service) HandleBreakoutCreate(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Publish as state event
-	ctx := context.Background()
-	svc.sendBreakoutStateEvent(ctx, id.RoomID(body.RoomID), breakoutID, map[string]interface{}{
+	svc.sendBreakoutStateEvent(context.Background(), id.RoomID(body.RoomID), breakoutID, map[string]interface{}{
 		"topic":      topic,
 		"lk_alias":   lkAlias,
 		"created_by": createdBy,
@@ -199,14 +203,9 @@ func (svc *Service) HandleBreakoutJoin(w http.ResponseWriter, r *http.Request) {
 	SetCORS(w, r, svc.Config.AllowedOrigins)
 
 	var body struct {
-		BreakoutID  string `json:"breakout_id"`
-		DeviceID    string `json:"device_id"`
-		OpenIDToken struct {
-			AccessToken      string `json:"access_token"`
-			TokenType        string `json:"token_type"`
-			MatrixServerName string `json:"matrix_server_name"`
-			ExpiresIn        int    `json:"expires_in"`
-		} `json:"openid_token"`
+		BreakoutID  string      `json:"breakout_id"`
+		DeviceID    string      `json:"device_id"`
+		OpenIDToken OpenIDToken `json:"openid_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
@@ -215,23 +214,6 @@ func (svc *Service) HandleBreakoutJoin(w http.ResponseWriter, r *http.Request) {
 
 	if body.BreakoutID == "" || body.OpenIDToken.AccessToken == "" || body.DeviceID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "breakout_id, device_id, and openid_token are required"})
-		return
-	}
-
-	// Verify the OpenID token with the user's homeserver
-	verifyURL := fmt.Sprintf("https://%s/_matrix/federation/v1/openid/userinfo?access_token=%s",
-		body.OpenIDToken.MatrixServerName, url.QueryEscape(body.OpenIDToken.AccessToken))
-	resp, err := http.Get(verifyURL)
-	if err != nil || resp.StatusCode != 200 {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Failed to verify OpenID token"})
-		return
-	}
-	defer resp.Body.Close()
-	var userInfo struct {
-		Sub string `json:"sub"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil || userInfo.Sub == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid OpenID token"})
 		return
 	}
 
@@ -246,9 +228,16 @@ func (svc *Service) HandleBreakoutJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only members of the breakout's room (audit 2026-11-08: any Matrix user could join any
+	// breakout, and /breakout/list hands out the IDs).
+	userID, ok := svc.authorizeMember(r.Context(), w, r, body.OpenIDToken, id.RoomID(breakout.MatrixRoomID))
+	if !ok {
+		return
+	}
+
 	// Create JWT with the user's real identity
-	lkIdent := LiveKitIdentity(userInfo.Sub, body.DeviceID)
-	displayName := userInfo.Sub // Best we have without profile lookup
+	lkIdent := LiveKitIdentity(userID.String(), body.DeviceID)
+	displayName := userID.String() // Best we have without profile lookup
 	jwtToken, err := MakeGuestJWT(
 		svc.Config.LiveKitAPIKey, svc.Config.LiveKitAPISecret,
 		breakout.LKAlias, lkIdent, displayName, svc.Config.GuestTokenTTL,
@@ -263,7 +252,7 @@ func (svc *Service) HandleBreakoutJoin(w http.ResponseWriter, r *http.Request) {
 		"livekit_url":  svc.Config.LiveKitURL,
 		"livekit_room": breakout.LKAlias,
 		"breakout_id":  body.BreakoutID,
-		"user_id":      userInfo.Sub,
+		"user_id":      userID.String(),
 	})
 }
 
@@ -321,8 +310,8 @@ func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
 	allowedOrigins := svc.Config.AllowedOrigins
 
 	var body struct {
-		BreakoutID string `json:"breakout_id"`
-		UserID     string `json:"user_id"`
+		BreakoutID  string      `json:"breakout_id"`
+		OpenIDToken OpenIDToken `json:"openid_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		SetCORS(w, r, allowedOrigins)
@@ -348,6 +337,18 @@ func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Its creator, or someone whose power level could set breakout state anyway (audit
+	// 2026-11-08: anyone could end any breakout by ID).
+	userID, ok := svc.authorizeMember(r.Context(), w, r, body.OpenIDToken, id.RoomID(breakout.MatrixRoomID))
+	if !ok {
+		return
+	}
+	if userID.String() != breakout.CreatedBy && !svc.canManageBreakouts(r.Context(), id.RoomID(breakout.MatrixRoomID), userID) {
+		SetCORS(w, r, allowedOrigins)
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Only its creator or a room moderator can end this breakout"})
+		return
+	}
+
 	// Clean up guest sessions
 	ctx := context.Background()
 	sessions, _ := GetSessionsForBreakout(svc.DB, body.BreakoutID)
@@ -368,4 +369,29 @@ func (svc *Service) HandleBreakoutEnd(w http.ResponseWriter, r *http.Request) {
 		"status":      "ended",
 		"breakout_id": body.BreakoutID,
 	})
+}
+
+// authorizeMember verifies the OpenID token and that its user is joined to room. On failure it
+// has written the response (with CORS) and returns ok=false.
+func (svc *Service) authorizeMember(ctx context.Context, w http.ResponseWriter, r *http.Request, tok OpenIDToken, room id.RoomID) (id.UserID, bool) {
+	userID, err := VerifyOpenID(ctx, tok)
+	if err != nil {
+		log.Printf("breakout: OpenID verification failed: %v", err)
+		SetCORS(w, r, svc.Config.AllowedOrigins)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Could not verify your Matrix identity"})
+		return "", false
+	}
+	joined, err := svc.isJoinedMember(ctx, room, userID)
+	if err != nil {
+		log.Printf("breakout: membership check for %s in %s failed: %v", userID, room, err)
+		SetCORS(w, r, svc.Config.AllowedOrigins)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not check room membership"})
+		return "", false
+	}
+	if !joined {
+		SetCORS(w, r, svc.Config.AllowedOrigins)
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "You are not in this room"})
+		return "", false
+	}
+	return userID, true
 }
